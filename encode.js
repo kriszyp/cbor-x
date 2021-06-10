@@ -494,8 +494,8 @@ export class Encoder extends Decoder {
 			} else {
 				recordId = structures.nextId++
 				if (!recordId) {
-					recordId = 0
-					structures.nextId = 1
+					recordId = 1
+					structures.nextId = 2
 				}
 				if (recordId >= MAX_STRUCTURES) {// cycle back around
 					structures.nextId = (recordId = maxSharedStructures) + 1
