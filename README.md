@@ -244,10 +244,34 @@ During the serialization process, data is written to buffers. Again, allocating 
 Cbor-x currently uses tag id 105 and 26880-27135 for its [proposed extension for records](https://github.com/kriszyp/cbor-records).
 
 ### Dates
-cbor-x saves all JavaScript `Date`s using the standard CBOR date extension (tag 1).
+Cbor-x saves all JavaScript `Date`s using the standard CBOR date extension (tag 1).
 
 ### Structured Cloning
 With structured cloning enabled, cbor-x will also use tags/extensions to store Set, Map, Error, RegExp, ArrayBufferView objects and preserve their types.
+
+### List of supported tags for decoding
+Here is a list of CBOR tags that are supported for decoding:
+
+* 0 - String date
+* 1 - Numeric Date
+* 2 - BigInt
+* 3 - Negative BigInt
+* 27 - Generic named objects (used for Error, RegExp)
+* 64 - Uint8Array
+* 68 - Uint8ClampedArray
+* 69 - Uint16Array
+* 70 - Uint32Array
+* 71 - BigUint64Array
+* 72 - Int8Array
+* 77 - Int16Array
+* 78 - Int32Array
+* 79 - BigInt64Array
+* 81 - Float32Array
+* 82 - Float64Array
+* 105 - Records
+* 258 - Set
+* 259 - Map
+* 40009, 40010 - Pointers for cycles
 
 ## Alternate Encoding/Package
 The high-performance serialization and deserialization algorithms in this package are also available in the [msgpackr](https://github.com/kriszyp/msgpackr) for the MessagePack format, with the same API and design. A quick summary of the pros and cons of using MessagePack vs CBOR are:
@@ -259,7 +283,7 @@ The high-performance serialization and deserialization algorithms in this packag
 MIT
 
 ### Browser Consideration
-CBOR can be a great choice for high-performance data delivery to browsers, as reasonable data size is possible without compression. And CBOR  works very well in modern browsers. However, it is worth noting that if you want highly compact data, brotli or gzip are most effective in compressing, and CBOR's character frequency tends to defeat Huffman encoding used by these standard compression algorithms, resulting in less compact data than compressed JSON.
+CBOR can be a great choice for high-performance data delivery to browsers, as reasonable data size is possible without compression. And CBOR works very well in modern browsers. However, it is worth noting that if you want highly compact data, brotli or gzip are most effective in compressing, and CBOR's character frequency tends to defeat Huffman encoding used by these standard compression algorithms, often resulting in less compact data than compressed JSON.
 
 ### Credits
 
