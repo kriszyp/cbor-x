@@ -275,7 +275,7 @@ Here is a list of CBOR tags that are supported for decoding:
 
 ## Alternate Encoding/Package
 The high-performance serialization and deserialization algorithms in this package are also available in the [msgpackr](https://github.com/kriszyp/msgpackr) for the MessagePack format, with the same API and design. A quick summary of the pros and cons of using MessagePack vs CBOR are:
-* MessagePack has wider adoption, and, at least with this implementation is slightly more efficient (by roughly 2-4%, but YMMV).
+* MessagePack has wider adoption, and, at least with this implementation is slightly more efficient (by roughly 1%, but YMMV).
 * CBOR has an [official IETF standardization track](https://www.rfc-editor.org/rfc/rfc8949.html), and the record extensions is conceptually/philosophically a better fit for CBOR tags.
 
 ## License
