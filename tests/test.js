@@ -33,7 +33,7 @@ try {
 var ITERATIONS = 4000
 
 suite('CBOR basic tests', function(){
-	test('encode/decode data', function(){
+	test.only('encode/decode data', function(){
 		var data = {
 			data: [
 				{ a: 1, name: 'one', type: 'odd', isOdd: true },

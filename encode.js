@@ -11,6 +11,7 @@ const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
 const RECORD_STARTING_ID_PREFIX = 0x69 // tag 105/0x69
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
+let serializationId = 1
 let target
 let targetView
 let position = 0
@@ -99,7 +100,10 @@ export class Encoder extends Decoder {
 				hasSharedUpdate = false
 			structures = sharedStructures || []
 			if (sharedStringValues) {
-				findDuplicativeStrings()
+				serializationId++
+				sharedStringValues.values = []
+				sharedStringValues.nextPosition = 0
+				findDuplicativeStrings(value, encoder, sharedStringValues, !sharedStructures)
 				if (sharedStringValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
@@ -172,13 +176,21 @@ export class Encoder extends Decoder {
 					let sharedStatus = sharedStringValues.get(value)
 					if (sharedStatus) {
 						if (sharedStatus.isShared) {
-							target[position++] = sharedStatus.code
+							let sharedPosition = sharedStatus.position
+							if (sharedPosition < 16)
+								target[position++] = sharedPosition + 0xc0
+							else
+								NYI
+						} else if (sharedStatus.serializationId == serializationId) {
+							sharedStatus.count = sharedStatus.count++
 						} else {
-							sharedStatus.count = sharedStatus.count * 0.75 + 1
+							sharedStatus.serializationId = serializationId
+							sharedStatus.count = 1
 						}
 					} else {
 						sharedStringValues.set(value, {
 							isShared: false,
+							serializationId,
 							count: 1,
 						})
 					}
@@ -630,18 +642,28 @@ function findDuplicativeStrings(value, encoder, sharedStringValues, includeKeys)
 			if (value.length > 3) {
 				let sharedStatus = sharedStringValues.get(value)
 				if (sharedStatus) {
-					if (++sharedStatus.count == 2) {
-						sharedStringValues.values.push(value)
+				console.log(sharedStatus)
+					if (sharedStatus.serializationId == serializationId) {
+						if (++sharedStatus.count == 2) {
+							sharedStringValues.values.push(value)
+							sharedStatus.position = sharedStringValues.nextPosition
+						}
+					} else {						
+						sharedStatus.serializationId = serializationId
+						sharedStatus.count = 1
+						sharedStatus.position = -1
 					}
 				} else {
 					sharedStringValues.set(value, {
 						isShared: false,
+						serializationId,
 						count: 1,
+						position: -1
 					})
 				}
 			}
 			break
-		case 'object': {
+		case 'object':
 			if (value) {
 				if (value instanceof Array) {
 					for (let i = 0, l = value.length; i < l; i++) {
@@ -650,14 +672,16 @@ function findDuplicativeStrings(value, encoder, sharedStringValues, includeKeys)
 
 				} else {
 					for (var key in value) {
-						if (includeKeys)
-							findDuplicativeStrings(key, encoder, sharedStringValues)
-						findDuplicativeStrings(value[key], encoder, sharedStringValues, includeKeys
+						if (value.hasOwnProperty(key)) {
+							if (includeKeys)
+								findDuplicativeStrings(key, encoder, sharedStringValues)
+							findDuplicativeStrings(value[key], encoder, sharedStringValues, includeKeys)
+						}
 					}
 				}
 			}
-		}
-
+			break
+		case 'function': console.log(value)
 	}
 }
 
