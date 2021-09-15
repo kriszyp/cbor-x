@@ -1,3 +1,4 @@
+import { write } from 'fs'
 import { Decoder, mult10, Tag, typedArrays, addExtension as decodeAddExtension } from './decode.js'
 let textEncoder
 try {
@@ -40,6 +41,7 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
+		let sharedStringValues = (true || options.packed) ? new Map() : null
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
@@ -96,6 +98,17 @@ export class Encoder extends Decoder {
 			if (hasSharedUpdate)
 				hasSharedUpdate = false
 			structures = sharedStructures || []
+			if (sharedStringValues) {
+				findDuplicativeStrings()
+				if (sharedStringValues.values.length > 0) {
+					target[position++] = 0xd8 // one-byte tag
+					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+					writeArrayHeader(4)
+					encode(sharedStringValues.values)
+					writeArrayHeader(0) // prefixes
+					writeArrayHeader(0) // suffixes
+				}
+			}
 			try {
 				encode(value)
 				encoder.offset = position // update the offset so next serialization doesn't write over our buffer, but can continue writing to same buffer sequentially
@@ -110,6 +123,13 @@ export class Encoder extends Decoder {
 				}
 				return target.subarray(start, position) // position can change if we call encode again in saveStructures, so we get the buffer now
 			} finally {
+				if (sharedStringValues.sharedChars) {
+					let i = 0
+					let sharedString
+					while (sharedString = sharedStringValues[i++]) {
+
+					}
+				}
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
 						serializationsSinceTransitionRebuild++
@@ -148,14 +168,29 @@ export class Encoder extends Decoder {
 			var type = typeof value
 			var length
 			if (type === 'string') {
+				if (sharedStringValues) {
+					let sharedStatus = sharedStringValues.get(value)
+					if (sharedStatus) {
+						if (sharedStatus.isShared) {
+							target[position++] = sharedStatus.code
+						} else {
+							sharedStatus.count = sharedStatus.count * 0.75 + 1
+						}
+					} else {
+						sharedStringValues.set(value, {
+							isShared: false,
+							count: 1,
+						})
+					}
+				}
 				let strLength = value.length
 				let headerSize
 				// first we estimate the header size, so we can write to the correct location
 				if (strLength < 0x20) {
 					headerSize = 1
-				} else if (strLength < 0x100) {
+				} else if (strLength < 0xff) {
 					headerSize = 2
-				} else if (strLength < 0x10000) {
+				} else if (strLength < 0xff00) {
 					headerSize = 3
 				} else {
 					headerSize = 5
@@ -586,6 +621,43 @@ function writeArrayHeader(length) {
 		target[position++] = 0x9a
 		targetView.setUint32(position, length)
 		position += 4
+	}
+}
+
+function findDuplicativeStrings(value, encoder, sharedStringValues, includeKeys) {
+	switch(typeof value) {
+		case 'string':
+			if (value.length > 3) {
+				let sharedStatus = sharedStringValues.get(value)
+				if (sharedStatus) {
+					if (++sharedStatus.count == 2) {
+						sharedStringValues.values.push(value)
+					}
+				} else {
+					sharedStringValues.set(value, {
+						isShared: false,
+						count: 1,
+					})
+				}
+			}
+			break
+		case 'object': {
+			if (value) {
+				if (value instanceof Array) {
+					for (let i = 0, l = value.length; i < l; i++) {
+						findDuplicativeStrings(value[i], encoder, sharedStringValues, includeKeys)
+					}
+
+				} else {
+					for (var key in value) {
+						if (includeKeys)
+							findDuplicativeStrings(key, encoder, sharedStringValues)
+						findDuplicativeStrings(value[key], encoder, sharedStringValues, includeKeys
+					}
+				}
+			}
+		}
+
 	}
 }
 
