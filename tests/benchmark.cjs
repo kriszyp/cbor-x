@@ -43,12 +43,6 @@ console.log(rpad("", COL1, "-"), "|", lpad(":", COL2, "-"), "|", lpad(":", COL3,
 
 var buf, obj;
 
-if (JSON) {
-  buf = bench('buf = Buffer(JSON.stringify(obj));', JSON_stringify, data);
-  obj = bench('obj = JSON.parse(buf);', JSON.parse, buf);
-  test(obj);
-}
-
 if (cborX) {
 //  let packr = new msgpackr.Packr({ objectsAsMaps: true })
   buf = bench('require("cbor-x").encode(obj);', cborX.encode, data);
@@ -63,6 +57,12 @@ if (cborX) {
   obj = bench('cbor-x w/ shared structures: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
   test(obj);
 }
+if (JSON) {
+  buf = bench('buf = Buffer(JSON.stringify(obj));', JSON_stringify, data);
+  obj = bench('obj = JSON.parse(buf);', JSON.parse, buf);
+  test(obj);
+}
+
 
 if (msgpack_lite) {
   buf = bench('buf = require("msgpack-lite").encode(obj);', msgpack_lite.encode, data);

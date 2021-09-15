@@ -16,7 +16,7 @@
     "url": "http://github.com/kriszyp/cbor-x"
   },
   "scripts": {
-    "benchmark": "node ./tests/benchmark.js",
+    "benchmark": "node ./tests/benchmark.cjs",
     "build": "rollup -c",
     "prepare": "npm run build",
     "test": "mocha tests/test**.*js -u tdd --experimental-json-modules"
@@ -33,22 +33,22 @@
         "import": "./index.js"
       }
     },
-    "./pack": {
+    "./encode": {
       "node": {
         "import": "./index.js",
         "require": "./dist/node.cjs"
       },
       "default": {
-        "import": "./pack.js"
+        "import": "./encode.js"
       }
     },
-    "./unpack": {
+    "./decode": {
       "node": {
         "import": "./index.js",
         "require": "./dist/node.cjs"
       },
       "default": {
-        "import": "./unpack.js"
+        "import": "./decode.js"
       }
     }
   },
