@@ -21,19 +21,15 @@ interface Options {
 }
 interface Extension {
 	Class: Function
-	type: number
-	pack(value: any): Buffer | Uint8Array
-	unpack(messagePack: Buffer | Uint8Array): any
-}
-export class Unpackr {
-	constructor(options?: Options)
-	unpack(messagePack: Buffer | Uint8Array): any
+	tag: number
+	encode(value: any): Buffer | Uint8Array
 	decode(messagePack: Buffer | Uint8Array): any
-	unpackMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 }
-export class Decoder extends Unpackr {}
-export function unpack(messagePack: Buffer | Uint8Array): any
-export function unpackMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
+export class Decoder {
+	constructor(options?: Options)
+	decode(messagePack: Buffer | Uint8Array): any
+	decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
+}
 export function decode(messagePack: Buffer | Uint8Array): any
+export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 export function addExtension(extension: Extension): void
-export const C1: {}
