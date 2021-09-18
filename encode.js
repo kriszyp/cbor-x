@@ -42,7 +42,7 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
-		let sharedStringValues = (true || options.packed) ? new Map() : null
+		let packedValues = (true || options.packed) ? new Map() : null
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
@@ -99,16 +99,19 @@ export class Encoder extends Decoder {
 			if (hasSharedUpdate)
 				hasSharedUpdate = false
 			structures = sharedStructures || []
-			if (sharedStringValues) {
+			if (packedValues) {
 				serializationId++
-				sharedStringValues.values = []
-				sharedStringValues.nextPosition = 0
-				findDuplicativeStrings(value, encoder, sharedStringValues, !sharedStructures)
-				if (sharedStringValues.values.length > 0) {
+				packedValues.values = []
+				packedValues.nextPosition = 0
+				findDuplicativeStrings(value, encoder, packedValues, !sharedStructures)
+				if (packedValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
 					writeArrayHeader(4)
-					encode(sharedStringValues.values)
+					let savedValues = packedValues
+					packedValues = null // hide this so we don't reference in string writing
+					encode(savedValues.values)
+					packedValues = savedValues
 					writeArrayHeader(0) // prefixes
 					writeArrayHeader(0) // suffixes
 				}
@@ -127,10 +130,10 @@ export class Encoder extends Decoder {
 				}
 				return target.subarray(start, position) // position can change if we call encode again in saveStructures, so we get the buffer now
 			} finally {
-				if (sharedStringValues.sharedChars) {
+				if (packedValues.sharedChars) {
 					let i = 0
 					let sharedString
-					while (sharedString = sharedStringValues[i++]) {
+					while (sharedString = packedValues[i++]) {
 
 					}
 				}
@@ -172,23 +175,29 @@ export class Encoder extends Decoder {
 			var type = typeof value
 			var length
 			if (type === 'string') {
-				if (sharedStringValues) {
-					let sharedStatus = sharedStringValues.get(value)
-					if (sharedStatus) {
-						if (sharedStatus.isShared) {
-							let sharedPosition = sharedStatus.position
-							if (sharedPosition < 16)
-								target[position++] = sharedPosition + 0xc0
-							else
-								NYI
-						} else if (sharedStatus.serializationId == serializationId) {
-							sharedStatus.count = sharedStatus.count++
+				if (packedValues) {
+					let packedStatus = packedValues.get(value)
+					if (packedStatus) {
+						let packedPosition = packedStatus.position
+						if (packedPosition >= 0) {
+							if (packedPosition < 16)
+								target[position++] = packedPosition + 0xe0
+							else {
+								target[position++] = 0xc6
+								if (packedPosition & 1)
+									encode((15 - packedPosition) >> 1)
+								else
+									encode((packedPosition - 16) >> 1)
+							}
+							return
+						} else if (packedStatus.serializationId == serializationId) {
+							packedStatus.count = packedStatus.count++
 						} else {
-							sharedStatus.serializationId = serializationId
-							sharedStatus.count = 1
+							packedStatus.serializationId = serializationId
+							packedStatus.count = 1
 						}
 					} else {
-						sharedStringValues.set(value, {
+						packedValues.set(value, {
 							isShared: false,
 							serializationId,
 							count: 1,
@@ -563,10 +572,7 @@ export class Encoder extends Decoder {
 					if (recordIdsToRemove.length >= MAX_STRUCTURES - maxSharedStructures)
 						recordIdsToRemove.shift()[RECORD_SYMBOL] = undefined // we are cycling back through, and have to remove old ones
 					recordIdsToRemove.push(transition)
-					if (length < 0x16)
-						target[position++] = 0x82 + length // array header, length of values + 2
-					else
-						writeArrayHeader(length + 2)
+					writeArrayHeader(length + 2)
 					encode(keys)
 					target[position++] = 0x19 // uint16
 					target[position++] = RECORD_STARTING_ID_PREFIX
@@ -622,7 +628,9 @@ function copyBinary(source, target, targetOffset, offset, endOffset) {
 }
 
 function writeArrayHeader(length) {
-	if (length < 0x100) {
+	if (length < 0x18)
+		target[position++] = 0x80 | length
+	else if (length < 0x100) {
 		target[position++] = 0x98
 		target[position++] = length
 	} else if (length < 0x10000) {
@@ -636,25 +644,25 @@ function writeArrayHeader(length) {
 	}
 }
 
-function findDuplicativeStrings(value, encoder, sharedStringValues, includeKeys) {
+function findDuplicativeStrings(value, encoder, packedValues, includeKeys) {
 	switch(typeof value) {
 		case 'string':
 			if (value.length > 3) {
-				let sharedStatus = sharedStringValues.get(value)
-				if (sharedStatus) {
-				console.log(sharedStatus)
-					if (sharedStatus.serializationId == serializationId) {
-						if (++sharedStatus.count == 2) {
-							sharedStringValues.values.push(value)
-							sharedStatus.position = sharedStringValues.nextPosition
+				let packedStatus = packedValues.get(value)
+				if (packedStatus) {
+				console.log(packedStatus)
+					if (packedStatus.serializationId == serializationId) {
+						if (++packedStatus.count == 2) {
+							packedValues.values.push(value)
+							packedStatus.position = packedValues.nextPosition++
 						}
 					} else {						
-						sharedStatus.serializationId = serializationId
-						sharedStatus.count = 1
-						sharedStatus.position = -1
+						packedStatus.serializationId = serializationId
+						packedStatus.count = 1
+						packedStatus.position = -1
 					}
 				} else {
-					sharedStringValues.set(value, {
+					packedValues.set(value, {
 						isShared: false,
 						serializationId,
 						count: 1,
@@ -667,15 +675,15 @@ function findDuplicativeStrings(value, encoder, sharedStringValues, includeKeys)
 			if (value) {
 				if (value instanceof Array) {
 					for (let i = 0, l = value.length; i < l; i++) {
-						findDuplicativeStrings(value[i], encoder, sharedStringValues, includeKeys)
+						findDuplicativeStrings(value[i], encoder, packedValues, includeKeys)
 					}
 
 				} else {
 					for (var key in value) {
 						if (value.hasOwnProperty(key)) {
 							if (includeKeys)
-								findDuplicativeStrings(key, encoder, sharedStringValues)
-							findDuplicativeStrings(value[key], encoder, sharedStringValues, includeKeys)
+								findDuplicativeStrings(key, encoder, packedValues)
+							findDuplicativeStrings(value[key], encoder, packedValues, includeKeys)
 						}
 					}
 				}
