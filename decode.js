@@ -1,4 +1,3 @@
-"use strict"
 let decoder
 try {
 	decoder = new TextDecoder()
@@ -9,6 +8,8 @@ let position = 0
 let alreadySet
 const EMPTY_ARRAY = []
 const RECORD_TAG_ID = 0x69
+const PACKED_SHARE_TAG_ID = 51
+const PACKED_SHARED_VALUE_TAG_ID = 6
 const STOP_CODE = {}
 let strings = EMPTY_ARRAY
 let stringPosition = 0
@@ -19,6 +20,7 @@ let srcStringStart = 0
 let srcStringEnd = 0
 let referenceMap
 let currentExtensions = []
+let sharedValues
 let dataView
 let restoreMapsAsObject
 let defaultOptions = {
@@ -284,6 +286,13 @@ export function read() {
 						return token
 				} else
 					return token
+			} else if ((token >> 8) == PACKED_SHARE_TAG_ID) { // packed shared structure
+				if (src[position]++ != 0x84)
+					throw new Error('Packed shared structure must be followed by 4 element array')
+				sharedValues = read() // shared structures
+				if (read().length != 0 || read().length != 0)
+					throw new Error('cbor-x does not support prefix or suffix packed data')
+				return read() // read the rump
 			} else {
 				let extension = currentExtensions[token]
 				if (extension) {
@@ -303,6 +312,9 @@ export function read() {
 				case 0x17: return; // undefined
 				case 0x1f: 
 				default:
+					let packedValue = sharedValues[token]
+					if (packedValue !== undefined)
+						return packedValue
 					throw new Error('Unknown token ' + token)
 			}
 		default: // negative int
@@ -738,6 +750,10 @@ currentExtensions[RECORD_TAG_ID] = recordDefinition
 
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
+}
+
+currentExtensions[PACKED_SHARED_VALUE_TAG_ID] = (data) => { // packed value
+	return sharedValues[data]
 }
 
 currentExtensions[40009] = (id) => {
