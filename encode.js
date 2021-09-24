@@ -42,7 +42,7 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
-		let packedValues = (true || options.packed) ? new Map() : null
+		let packedValues = options.packed ? new Map() : null
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
@@ -103,7 +103,7 @@ export class Encoder extends Decoder {
 				serializationId++
 				packedValues.values = []
 				packedValues.nextPosition = 0
-				findDuplicativeStrings(value, encoder, packedValues, !sharedStructures)
+				findDuplicativeStrings(value, encoder, packedValues, !encoder.useRecords)
 				if (packedValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
@@ -130,7 +130,7 @@ export class Encoder extends Decoder {
 				}
 				return target.subarray(start, position) // position can change if we call encode again in saveStructures, so we get the buffer now
 			} finally {
-				if (packedValues.sharedChars) {
+				if (packedValues && packedValues.sharedChars) {
 					let i = 0
 					let sharedString
 					while (sharedString = packedValues[i++]) {
@@ -181,21 +181,19 @@ export class Encoder extends Decoder {
 						let packedPosition = packedStatus.position
 						if (packedPosition >= 0) {
 							if (packedPosition < 16)
-								target[position++] = packedPosition + 0xe0
+								target[position++] = packedPosition + 0xe0 // simple values, defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
 							else {
-								target[position++] = 0xc6
+								target[position++] = 0xc6 // tag 6 defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
 								if (packedPosition & 1)
 									encode((15 - packedPosition) >> 1)
 								else
 									encode((packedPosition - 16) >> 1)
 							}
 							return
-						} else if (packedStatus.serializationId == serializationId) {
-							packedStatus.count = packedStatus.count++
-						} else {
+						} else if (packedStatus.serializationId != serializationId) {
 							packedStatus.serializationId = serializationId
-							packedStatus.count = 1
-						}
+							//packedStatus.count = 1 + packedStatus.count * 0.75
+						} // else any in-doc incrementation?
 					} else {
 						packedValues.set(value, {
 							isShared: false,
@@ -650,13 +648,12 @@ function findDuplicativeStrings(value, encoder, packedValues, includeKeys) {
 			if (value.length > 3) {
 				let packedStatus = packedValues.get(value)
 				if (packedStatus) {
-				console.log(packedStatus)
 					if (packedStatus.serializationId == serializationId) {
 						if (++packedStatus.count == 2) {
 							packedValues.values.push(value)
 							packedStatus.position = packedValues.nextPosition++
 						}
-					} else {						
+					} else {	
 						packedStatus.serializationId = serializationId
 						packedStatus.count = 1
 						packedStatus.position = -1

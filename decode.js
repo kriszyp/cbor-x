@@ -20,6 +20,7 @@ let srcStringStart = 0
 let srcStringEnd = 0
 let referenceMap
 let currentExtensions = []
+let currentExtensionRanges = []
 let packedValues
 let dataView
 let restoreMapsAsObject
@@ -293,9 +294,15 @@ export function read() {
 						return extension(read)
 					else
 						return extension(read())
+				} else {
+					let input = read()
+					for (let i = 0; i < currentExtensionRanges.length; i++) {
+						let value = currentExtensionRanges[i](token, input)
+						if (value !== undefined)
+							return value
+					}
+					return new Tag(input)
 				}
-				else
-					return new Tag(read())
 			}
 		case 7: // fixed value
 			switch (token) {
@@ -747,9 +754,9 @@ currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 const packedTable = (read) => {
 	if (src[position++] != 0x84)
 		throw new Error('Packed shared structure must be followed by 4 element array')
-	packedValues = read() // shared structures
-	if (read().length != 0 || read().length != 0)
-		throw new Error('cbor-x does not support prefix or suffix packed data')
+	packedValues = read() // shared items
+	packedValues.prefixes = read()
+	packedValues.suffixes = read()
 	return read() // read the rump
 }
 packedTable.handlesRead = true
@@ -800,7 +807,27 @@ currentExtensions[258] = (array) => new Set(array); // https://github.com/input-
 	}
 	return read()
 }).handlesRead = true
-
+function combine(a, b) {
+	if (typeof a === 'string')
+		return a + b
+	if (a instanceof Array)
+		return a.concat(b)
+	return Object.assign({}, a, b)
+}
+currentExtensionRanges.push((tag, input) => {
+	if (tag >= 225 && tag <= 255)
+		return combine(packedTable.prefixes[tag - 224], input)
+	if (tag >= 28704 && tag <= 32767)
+		return combine(packedTable.prefixes[tag - 28672], input)
+	if (tag >= 1879052288 && tag <= 2147483647)
+		return combine(packedTable.prefixes[tag - 1879048192], input)
+	if (tag >= 216 && tag <= 223)
+		return combine(input, packedTable.suffixes[tag - 216])
+	if (tag >= 27647 && tag <= 28671)
+		return combine(input, packedTable.suffixes[tag - 27639])
+	if (tag >= 1811940352 && tag <= 1879048191)
+		return combine(input, packedTable.suffixes[tag - 1811939328])
+})
 
 export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')
 const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 81, 82]
