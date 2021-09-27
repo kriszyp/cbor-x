@@ -50,7 +50,7 @@ console.log(rpad("", COL1, "-"), "|", lpad(":", COL2, "-"), "|", lpad(":", COL3,
 var buf, obj;
 
 if (cborX) {
-  let encoder = new cborX.Encoder({ useRecords: false, packed: true })
+  let encoder = new cborX.Encoder({ useRecords: false, pack: true })
   buf = bench('cbor-x packed and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
   console.log('size', buf.length)
   
@@ -61,7 +61,7 @@ if (cborX) {
   console.log('size', buf.length)
 
 
-  encoder = new cborX.Encoder({ useRecords: true, packed: true })
+  encoder = new cborX.Encoder({ useRecords: true, pack: true })
   buf = bench('cbor-x packed and useRecords and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
   console.log('size', buf.length)
   

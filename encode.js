@@ -105,7 +105,7 @@ export class Encoder extends Decoder {
 					packedValues = new Map()
 				packedValues.values = []
 				packedValues.nextPosition = 0
-				findDuplicativeStrings(value, encoder, packedValues, !sharedStructures)
+				findRepetitiveStrings(value, encoder, packedValues, !encoder.useRecords)
 				if (packedValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
@@ -658,7 +658,7 @@ function writeArrayHeader(length) {
 	}
 }
 
-function findDuplicativeStrings(value, encoder, packedValues, includeKeys) {
+function findRepetitiveStrings(value, encoder, packedValues, includeKeys) {
 	switch(typeof value) {
 		case 'string':
 			if (value.length > 3) {
@@ -688,15 +688,15 @@ function findDuplicativeStrings(value, encoder, packedValues, includeKeys) {
 			if (value) {
 				if (value instanceof Array) {
 					for (let i = 0, l = value.length; i < l; i++) {
-						findDuplicativeStrings(value[i], encoder, packedValues, includeKeys)
+						findRepetitiveStrings(value[i], encoder, packedValues, includeKeys)
 					}
 
 				} else {
 					for (var key in value) {
 						if (value.hasOwnProperty(key)) {
 							if (includeKeys)
-								findDuplicativeStrings(key, encoder, packedValues)
-							findDuplicativeStrings(value[key], encoder, packedValues, includeKeys)
+								findRepetitiveStrings(key, encoder, packedValues)
+							findRepetitiveStrings(value[key], encoder, packedValues, includeKeys)
 						}
 					}
 				}
