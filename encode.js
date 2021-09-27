@@ -42,7 +42,7 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
-		let packedValues = options.packed ? new Map() : null
+		let packedValues = options.sharedPack ? new Map() : null
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
@@ -99,11 +99,13 @@ export class Encoder extends Decoder {
 			if (hasSharedUpdate)
 				hasSharedUpdate = false
 			structures = sharedStructures || []
-			if (packedValues) {
+			if (options.pack) {
 				serializationId++
+				if (!packedValues || ((serializationId & 0xf) == 0xf) && !options.sharedPack)
+					packedValues = new Map()
 				packedValues.values = []
 				packedValues.nextPosition = 0
-				findDuplicativeStrings(value, encoder, packedValues, !encoder.useRecords)
+				findDuplicativeStrings(value, encoder, packedValues, !sharedStructures)
 				if (packedValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
@@ -168,6 +170,10 @@ export class Encoder extends Decoder {
 				}
 			}
 		}
+		this.setSharedPack(sharedPack) {
+			this.sharedPack = sharedPack
+			sharedStringValues = sharedPack ? new Map() : null
+		}
 		const encode = (value) => {
 			if (position > safeEnd)
 				target = makeRoom(position)
@@ -192,7 +198,17 @@ export class Encoder extends Decoder {
 							return
 						} else if (packedStatus.serializationId != serializationId) {
 							packedStatus.serializationId = serializationId
-							//packedStatus.count = 1 + packedStatus.count * 0.75
+							packedStatus.count = 1
+							if (options.sharedPack) {
+								let sharedCount = packedStatus.sharedCount = (packedStatus.sharedCount || 0) + 1
+								if (shareCount > (options.sharedPack.threshold || 5)) {
+									let sharedPosition = packedStatus.position = packedStatus.nextSharedPosition
+									hasSharedUpdate = true
+									if (sharedPosition < 16)
+										target[position++] = sharedPosition + 0xc0
+
+								}
+							}
 						} // else any in-doc incrementation?
 					} else {
 						packedValues.set(value, {

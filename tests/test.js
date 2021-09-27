@@ -101,6 +101,55 @@ suite('CBOR basic tests', function(){
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
+	test('encode/decode sample data with packing', function(){
+		var data = sampleData
+		let encoder = new Encoder({ pack: true, useRecords: false })
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
+	})
+	test('encode/decode sample data with packing and records', function(){
+		var data = sampleData
+		let structures = []
+		let encoder = new Encoder({ structures, pack: true, useRecords: true })
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
+	})
+	test('encode/decode sample data with shared packing and records', function(){
+		let structures = []
+		let encoder = new Encoder({ structures, sharedPack: true, useRecords: true })
+		for (let i = 0; i < 20; i++) {
+			data = {
+				shouldShare: 'same each time',
+				shouldShare2: 'same each time 2',
+				shouldntShare: 'different each time ' + i
+			}
+			if (i == 10)
+				encoder.setSharedPack(false)
+			var serialized = encoder.encode(data)
+			var deserialized = encoder.decode(serialized)
+			assert.deepEqual(deserialized, data)
+		}
+	})
+	test('encode/decode sample data with individual packing, shared packing and records', function(){
+		let structures = []
+		let encoder = new Encoder({ structures, pack: true, sharedPack: true, useRecords: true })
+		for (let i = 0; i < 20; i++) {
+			data = {
+				shouldShare: 'same each time',
+				shouldShare2: 'same each time',
+				shouldntShare: 'different each time ' + i,
+				shouldntShare2: 'different each time ' + i,
+				noPack: 'no packing ' + i,
+			}
+			if (i == 10)
+				encoder.setSharedPack(false)
+			var serialized = encoder.encode(data)
+			var deserialized = encoder.decode(serialized)
+			assert.deepEqual(deserialized, data)
+		}
+	})
 	if (typeof Buffer != 'undefined')
 	test('replace data', function(){
 		var data1 = {
