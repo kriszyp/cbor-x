@@ -5,7 +5,7 @@ export enum FLOAT32_OPTIONS {
 	DECIMAL_FIT = 4
 }
 
-interface Options {
+export interface Options {
 	useFloat32?: FLOAT32_OPTIONS
 	useRecords?: boolean
 	structures?: {}[]
@@ -16,6 +16,9 @@ interface Options {
 	useTimestamp32?: boolean
 	largeBigIntToFloat?: boolean
 	encodeUndefinedAsNil?: boolean
+	maxSharedStructures?: number
+	maxOwnStructures?: number
+	shouldShareStructure?: (keys: string[]) => boolean
 	getStructures?(): {}[]
 	saveStructures?(structures: {}[]): boolean | void
 }
@@ -33,3 +36,4 @@ export class Decoder {
 export function decode(messagePack: Buffer | Uint8Array): any
 export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 export function addExtension(extension: Extension): void
+export function roundFloat32(float32Number: number): number

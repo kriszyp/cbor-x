@@ -7,18 +7,14 @@ export class EncoderStream extends Transform {
 	constructor(options) {
 		if (!options)
 			options = {}
+		options.writableObjectMode = true
 		super(options)
 		options.sequential = true
-		this.encoder = new Encoder(options)
+		this.encoder = options.encoder || new Encoder(options)
 	}
-	write(value) {
+	_transform(value, encoding, callback) {
 		this.push(this.encoder.encode(value))
-	}
-
-	end(value) {
-		if (value != null)
-			this.push(this.encoder.encode(value))
-		this.push(null)
+		callback()
 	}
 }
 
@@ -29,7 +25,7 @@ export class DecoderStream extends Transform {
 		options.objectMode = true
 		super(options)
 		options.structures = []
-		this.decoder = new Decoder(options)
+		this.decoder = options.decoder || new Decoder(options)
 	}
 	_transform(chunk, encoding, callback) {
 		if (this.incompleteBuffer) {

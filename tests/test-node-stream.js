@@ -1,6 +1,9 @@
 import { EncoderStream, DecoderStream } from '../node-index.js'
 import stream from 'stream'
 import chai from 'chai'
+import util from 'util'
+import fs from 'fs'
+const finished = util.promisify(stream.finished)
 var assert = chai.assert
 
 suite('cbor-x node stream tests', function(){
@@ -47,4 +50,11 @@ suite('cbor-x node stream tests', function(){
 		bufferStream.push(new Uint8Array([1, 2]))
 		bufferStream.push(null)
 	}))
+
+	teardown(function() {
+		try {
+			fs.unlinkSync('test-output.msgpack')
+		}catch(error){}
+	})
 })
+

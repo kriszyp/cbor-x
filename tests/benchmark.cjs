@@ -1,4 +1,4 @@
-var cborX = tryRequire("..");
+var cborX = tryRequire("../dist/node.cjs");
 var msgpack_node = tryRequire("msgpack");
 var msgpack_msgpack = tryRequire("@msgpack/msgpack");
 var msgpack_lite = tryRequire("msgpack-lite");
@@ -63,6 +63,12 @@ if (JSON) {
   test(obj);
 }
 
+
+if (JSON) {
+  buf = bench('buf = Buffer(JSON.stringify(obj));', JSON_stringify, data);
+  obj = bench('obj = JSON.parse(buf);', JSON.parse, buf);
+  test(obj);
+}
 
 if (msgpack_lite) {
   buf = bench('buf = require("msgpack-lite").encode(obj);', msgpack_lite.encode, data);

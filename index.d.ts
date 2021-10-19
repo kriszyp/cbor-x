@@ -1,10 +1,11 @@
-export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource } from './decode.js'
+export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource, roundFloat32 } from './decode.js'
 export { Encoder, encode } from './encode.js'
+import { Transform, Readable } from 'stream'
 
 export as namespace CBOR;
-export class DecoderStream {
+export class DecoderStream extends Transform {
+	constructor(options?: Options | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean })
 }
-export class EncoderStream {
-	write(value: any): void
-	end(value?: any): void
+export class EncoderStream extends Transform {
+	constructor(options?: Options | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean })
 }

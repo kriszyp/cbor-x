@@ -6,6 +6,7 @@ function tryRequire(module) {
 	try {
 		return require(module)
 	} catch(error) {
+		console.log(error)
 	}
 }
 //if (typeof chai === 'undefined') { chai = require('chai') }

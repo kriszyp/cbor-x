@@ -43,11 +43,8 @@ export class Encoder extends Decoder {
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
-		if (this.structures && this.structures.length > maxSharedStructures) {
-			throw new Error('Too many shared structures')
-		}
 
-		this.encode = function(value) {
+		this.encode = function(value, encodeOptions) {
 			if (!target) {
 				target = new ByteArrayAllocate(8192)
 				targetView = new DataView(target.buffer, 0, 8192)
@@ -60,7 +57,8 @@ export class Encoder extends Decoder {
 				targetView = new DataView(target.buffer, 0, target.length)
 				safeEnd = target.length - 10
 				position = 0
-			}
+			} else if (encodeOptions === REUSE_BUFFER_MODE)
+				position = (position + 7) & 0x7ffffff8 // Word align to make any future copying of this buffer faster
 			start = position
 			referenceMap = encoder.structuredClone ? new Map() : null
 			sharedStructures = encoder.structures
@@ -68,7 +66,7 @@ export class Encoder extends Decoder {
 				if (sharedStructures.uninitialized)
 					encoder.structures = sharedStructures = encoder.getStructures()
 				let sharedStructuresLength = sharedStructures.length
-				if (sharedStructuresLength >  maxSharedStructures && !isSequential)
+				if (sharedStructuresLength > maxSharedStructures && !isSequential)
 					sharedStructuresLength = maxSharedStructures
 				if (!sharedStructures.transitions) {
 					// rebuild our structure transitions
@@ -78,8 +76,8 @@ export class Encoder extends Decoder {
 						if (!keys)
 							continue
 						let nextTransition, transition = sharedStructures.transitions
-						for (let i =0, l = keys.length; i < l; i++) {
-							let key = keys[i]
+						for (let j = 0, l = keys.length; j < l; j++) {
+							let key = keys[j]
 							nextTransition = transition[key]
 							if (!nextTransition) {
 								nextTransition = transition[key] = Object.create(null)
@@ -108,7 +106,12 @@ export class Encoder extends Decoder {
 					referenceMap = null
 					return serialized
 				}
-				return target.subarray(start, position) // position can change if we call encode again in saveStructures, so we get the buffer now
+				if (encodeOptions === REUSE_BUFFER_MODE) {
+					target.start = start
+					target.end = position
+					return target
+				}
+				return target.subarray(start, position) // position can change if we call pack again in saveStructures, so we get the buffer now
 			} finally {
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
@@ -130,13 +133,15 @@ export class Encoder extends Decoder {
 						if (encoder.structures.length > maxSharedStructures) {
 							encoder.structures = encoder.structures.slice(0, maxSharedStructures)
 						}
-
+						// we can't rely on start/end with REUSE_BUFFER_MODE since they will (probably) change when we save
+						let returnBuffer = target.subarray(start, position)
 						if (encoder.saveStructures(encoder.structures, lastSharedStructuresLength) === false) {
 							// get updated structures and try again if the update failed
 							encoder.structures = encoder.getStructures() || []
 							return encoder.encode(value)
 						}
 						lastSharedStructuresLength = encoder.structures.length
+						return returnBuffer
 					}
 				}
 			}
@@ -257,7 +262,7 @@ export class Encoder extends Decoder {
 						targetView.setFloat32(position, value)
 						let xShifted
 						if (useFloat32 < 4 ||
-							// this checks for  rounding of numbers that were encoded in 32-bit float to nearest significant decimal digit that could be preserved
+								// this checks for rounding of numbers that were encoded in 32-bit float to nearest significant decimal digit that could be preserved
 								((xShifted = value * mult10[((target[position] & 0x7f) << 1) | (target[position + 1] >> 7)]) >> 0) === xShifted) {
 							position += 4
 							return
@@ -388,7 +393,7 @@ export class Encoder extends Decoder {
 			} else if (type === 'undefined') {
 				target[position++] = 0xf7
 			} else {
-				throw new Error('Unknown type ' + type)
+				throw new Error('Unknown type: ' + type)
 			}
 		}
 
@@ -477,7 +482,7 @@ export class Encoder extends Decoder {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = keys.length
-			for (let i =0; i < length; i++) {
+			for (let i = 0; i < length; i++) {
 				let key = keys[i]
 				nextTransition = transition[key]
 				if (!nextTransition) {
@@ -720,3 +725,4 @@ export const encode = defaultEncoder.encode
 export { FLOAT32_OPTIONS } from './decode.js'
 import { FLOAT32_OPTIONS } from './decode.js'
 export const { NEVER, ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } = FLOAT32_OPTIONS
+export const REUSE_BUFFER_MODE = 1000
