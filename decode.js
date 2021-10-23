@@ -1,4 +1,3 @@
-"use strict"
 let decoder
 try {
 	decoder = new TextDecoder()
@@ -9,6 +8,8 @@ let position = 0
 let alreadySet
 const EMPTY_ARRAY = []
 const RECORD_TAG_ID = 0x69
+const PACKED_TABLE_TAG_ID = 51
+const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
 let strings = EMPTY_ARRAY
 let stringPosition = 0
@@ -19,8 +20,11 @@ let srcStringStart = 0
 let srcStringEnd = 0
 let referenceMap
 let currentExtensions = []
+let currentExtensionRanges = []
+let packedValues
 let dataView
 let restoreMapsAsObject
+let sharedValues
 let defaultOptions = {
 	useRecords: false,
 	mapsAsObjects: true
@@ -58,6 +62,9 @@ export class Decoder {
 		dataView = source.dataView || (source.dataView = new DataView(source.buffer, source.byteOffset, source.byteLength))
 		if (this) {
 			currentDecoder = this
+			packedValues = this.sharedValues &&
+				(this.pack ? new Array(this.maxPrivatePackedValues || 16).concat(this.sharedValues) :
+				this.sharedValues)
 			if (this.structures) {
 				currentStructures = this.structures
 				return checkedRead()
@@ -68,6 +75,7 @@ export class Decoder {
 			currentDecoder = defaultOptions
 			if (!currentStructures || currentStructures.length > 0)
 				currentStructures = []
+			packedValues = null
 		}
 		return checkedRead()
 	}
@@ -291,9 +299,15 @@ export function read() {
 						return extension(read)
 					else
 						return extension(read())
+				} else {
+					let input = read()
+					for (let i = 0; i < currentExtensionRanges.length; i++) {
+						let value = currentExtensionRanges[i](token, input)
+						if (value !== undefined)
+							return value
+					}
+					return new Tag(input)
 				}
-				else
-					return new Tag(read())
 			}
 		case 7: // fixed value
 			switch (token) {
@@ -303,6 +317,9 @@ export function read() {
 				case 0x17: return; // undefined
 				case 0x1f: 
 				default:
+					let packedValue = packedValues[token]
+					if (packedValue !== undefined)
+						return packedValue
 					throw new Error('Unknown token ' + token)
 			}
 		default: // negative int
@@ -739,6 +756,23 @@ currentExtensions[RECORD_TAG_ID] = recordDefinition
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
+const packedTable = (read) => {
+	if (src[position++] != 0x84)
+		throw new Error('Packed values structure must be followed by 4 element array')
+	let newPackedValues = read() // packed values
+	packedValues = packedValues ? newPackedValues.concat(packedValues.slice(newPackedValues.length)) : newPackedValues
+	packedValues.prefixes = read()
+	packedValues.suffixes = read()
+	return read() // read the rump
+}
+packedTable.handlesRead = true
+currentExtensions[51] = packedTable
+
+currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
+	if (typeof data == 'number')
+		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
+	throw new Error('No support for non-integer packed references yet')
+}
 
 currentExtensions[40009] = (id) => {
 	// id extension (for structured clones)
@@ -779,7 +813,27 @@ currentExtensions[258] = (array) => new Set(array); // https://github.com/input-
 	}
 	return read()
 }).handlesRead = true
-
+function combine(a, b) {
+	if (typeof a === 'string')
+		return a + b
+	if (a instanceof Array)
+		return a.concat(b)
+	return Object.assign({}, a, b)
+}
+currentExtensionRanges.push((tag, input) => {
+	if (tag >= 225 && tag <= 255)
+		return combine(packedTable.prefixes[tag - 224], input)
+	if (tag >= 28704 && tag <= 32767)
+		return combine(packedTable.prefixes[tag - 28672], input)
+	if (tag >= 1879052288 && tag <= 2147483647)
+		return combine(packedTable.prefixes[tag - 1879048192], input)
+	if (tag >= 216 && tag <= 223)
+		return combine(input, packedTable.suffixes[tag - 216])
+	if (tag >= 27647 && tag <= 28671)
+		return combine(input, packedTable.suffixes[tag - 27639])
+	if (tag >= 1811940352 && tag <= 1879048191)
+		return combine(input, packedTable.suffixes[tag - 1811939328])
+})
 
 export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')
 const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 81, 82]

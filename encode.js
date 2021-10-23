@@ -1,3 +1,4 @@
+import { write } from 'fs'
 import { Decoder, mult10, Tag, typedArrays, addExtension as decodeAddExtension } from './decode.js'
 let textEncoder
 try {
@@ -10,6 +11,7 @@ const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
 const RECORD_STARTING_ID_PREFIX = 0x69 // tag 105/0x69
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
+let serializationId = 1
 let target
 let targetView
 let position = 0
@@ -25,6 +27,7 @@ export class Encoder extends Decoder {
 		let hasSharedUpdate
 		let structures
 		let referenceMap
+		options = options || {}
 		let lastSharedStructuresLength = 0
 		let encodeUtf8 = ByteArray.prototype.utf8Write ? function(string, position, maxBytes) {
 			return target.utf8Write(string, position, maxBytes)
@@ -35,10 +38,19 @@ export class Encoder extends Decoder {
 
 		let encoder = this
 		let maxSharedStructures = 64
-		let isSequential = options && options.sequential
+		let isSequential = options.sequential
 		if (isSequential) {
 			maxSharedStructures = 0
 			this.structures = []
+		}
+		let samplingPackedValues, packedObjectMap, sharedValues = options.sharedValues
+		let sharedPackedObjectMap
+		if (sharedValues) {
+			sharedPackedObjectMap = Object.create(null)
+			for (let i = 0, l = sharedValues.length; i < l; i++) {
+				sharedPackedObjectMap[sharedValues[i]] = i
+			}
+
 		}
 		let recordIdsToRemove = []
 		let transitionsCount = 0
@@ -94,6 +106,29 @@ export class Encoder extends Decoder {
 			if (hasSharedUpdate)
 				hasSharedUpdate = false
 			structures = sharedStructures || []
+			packedObjectMap = sharedPackedObjectMap
+			if (options.pack) {
+				let packedValues = new Map()
+				packedValues.values = []
+				packedValues.encoder = encoder
+				packedValues.maxValues = options.maxPrivatePackedValues || (sharedPackedObjectMap ? 16 : Infinity)
+				packedValues.objectMap = sharedPackedObjectMap || false
+				packedValues.samplingPackedValues = samplingPackedValues
+				findRepetitiveStrings(value, packedValues)
+				if (packedValues.values.length > 0) {
+					target[position++] = 0xd8 // one-byte tag
+					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+					writeArrayHeader(4)
+					let valuesArray = packedValues.values
+					encode(valuesArray)
+					writeArrayHeader(0) // prefixes
+					writeArrayHeader(0) // suffixes
+					packedObjectMap = Object.create(sharedPackedObjectMap || null)
+					for (let i = 0, l = valuesArray.length; i < l; i++) {
+						packedObjectMap[valuesArray[i]] = i
+					}
+				}
+			}
 			try {
 				encode(value)
 				encoder.offset = position // update the offset so next serialization doesn't write over our buffer, but can continue writing to same buffer sequentially
@@ -135,15 +170,39 @@ export class Encoder extends Decoder {
 						}
 						// we can't rely on start/end with REUSE_BUFFER_MODE since they will (probably) change when we save
 						let returnBuffer = target.subarray(start, position)
+						let shared = encoder.structures || []
+						if (sharedValues) {
+							shared = shared.concat(sharedValues)
+						}
+
 						if (encoder.saveStructures(encoder.structures, lastSharedStructuresLength) === false) {
 							// get updated structures and try again if the update failed
 							encoder.structures = encoder.getStructures() || []
 							return encoder.encode(value)
 						}
-						lastSharedStructuresLength = encoder.structures.length
+						lastSharedStructuresLength = shared.length
 						return returnBuffer
 					}
 				}
+			}
+		}
+		this.findCommonStringsToPack = () => {
+			samplingPackedValues = new Map()
+			if (!sharedPackedObjectMap)
+				sharedPackedObjectMap = Object.create(null)
+			return ({ threshold }) => {
+				threshold = threshold || 4
+				let position = this.pack ? options.maxPrivatePackedValues || 16 : 0
+				if (!sharedValues)
+					sharedValues = this.sharedValues = []
+				for (let [ key, status ] of samplingPackedValues) {
+					if (status.count > threshold) {
+						sharedPackedObjectMap[key] = position++
+						sharedValues.push(key)
+						hasSharedUpdate = true
+					}
+				}
+				samplingPackedValues = null
 			}
 		}
 		const encode = (value) => {
@@ -153,6 +212,43 @@ export class Encoder extends Decoder {
 			var type = typeof value
 			var length
 			if (type === 'string') {
+				if (packedObjectMap) {
+					let packedPosition = packedObjectMap[value]
+					if (packedPosition >= 0) {
+						if (packedPosition < 16)
+							target[position++] = packedPosition + 0xe0 // simple values, defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+						else {
+							target[position++] = 0xc6 // tag 6 defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+							if (packedPosition & 1)
+								encode((15 - packedPosition) >> 1)
+							else
+								encode((packedPosition - 16) >> 1)
+						}
+						return
+/*						} else if (packedStatus.serializationId != serializationId) {
+							packedStatus.serializationId = serializationId
+							packedStatus.count = 1
+							if (options.sharedPack) {
+								let sharedCount = packedStatus.sharedCount = (packedStatus.sharedCount || 0) + 1
+								if (shareCount > (options.sharedPack.threshold || 5)) {
+									let sharedPosition = packedStatus.position = packedStatus.nextSharedPosition
+									hasSharedUpdate = true
+									if (sharedPosition < 16)
+										target[position++] = sharedPosition + 0xc0
+
+								}
+							}
+						} // else any in-doc incrementation?*/
+					} else if (samplingPackedValues && !options.pack) {
+						let status = samplingPackedValues.get(value)
+						if (status)
+							status.count++
+						else
+							samplingPackedValues.set(value, {
+								count: 1,
+							})
+					}
+				}
 				let strLength = value.length
 				let headerSize
 				// first we estimate the header size, so we can write to the correct location
@@ -521,10 +617,7 @@ export class Encoder extends Decoder {
 					if (recordIdsToRemove.length >= MAX_STRUCTURES - maxSharedStructures)
 						recordIdsToRemove.shift()[RECORD_SYMBOL] = undefined // we are cycling back through, and have to remove old ones
 					recordIdsToRemove.push(transition)
-					if (length < 0x16)
-						target[position++] = 0x82 + length // array header, length of values + 2
-					else
-						writeArrayHeader(length + 2)
+					writeArrayHeader(length + 2)
 					encode(keys)
 					target[position++] = 0x19 // uint16
 					target[position++] = RECORD_STARTING_ID_PREFIX
@@ -580,7 +673,9 @@ function copyBinary(source, target, targetOffset, offset, endOffset) {
 }
 
 function writeArrayHeader(length) {
-	if (length < 0x100) {
+	if (length < 0x18)
+		target[position++] = 0x80 | length
+	else if (length < 0x100) {
 		target[position++] = 0x98
 		target[position++] = length
 	} else if (length < 0x10000) {
@@ -591,6 +686,56 @@ function writeArrayHeader(length) {
 		target[position++] = 0x9a
 		targetView.setUint32(position, length)
 		position += 4
+	}
+}
+
+function findRepetitiveStrings(value, packedValues) {
+	switch(typeof value) {
+		case 'string':
+			if (value.length > 3) {
+				if (packedValues.objectMap[value] > -1 || packedValues.values.length >= packedValues.maxValues)
+					return
+				let packedStatus = packedValues.get(value)
+				if (packedStatus) {
+					if (++packedStatus.count == 2) {
+						packedValues.values.push(value)
+					}
+				} else {
+					packedValues.set(value, {
+						count: 1,
+					})
+					if (packedValues.samplingPackedValues) {
+						let status = packedValues.samplingPackedValues.get(value)
+						if (status)
+							status.count++
+						else
+							packedValues.samplingPackedValues.set(value, {
+								count: 1,
+							})
+					}
+				}
+			}
+			break
+		case 'object':
+			if (value) {
+				if (value instanceof Array) {
+					for (let i = 0, l = value.length; i < l; i++) {
+						findRepetitiveStrings(value[i], packedValues)
+					}
+
+				} else {
+					let includeKeys = !packedValues.encoder.useRecords
+					for (var key in value) {
+						if (value.hasOwnProperty(key)) {
+							if (includeKeys)
+								findRepetitiveStrings(key, packedValues)
+							findRepetitiveStrings(value[key], packedValues)
+						}
+					}
+				}
+			}
+			break
+		case 'function': console.log(value)
 	}
 }
 
