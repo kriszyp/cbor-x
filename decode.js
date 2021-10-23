@@ -24,6 +24,7 @@ let currentExtensionRanges = []
 let packedValues
 let dataView
 let restoreMapsAsObject
+let sharedValues
 let defaultOptions = {
 	useRecords: false,
 	mapsAsObjects: true
@@ -61,6 +62,9 @@ export class Decoder {
 		dataView = source.dataView || (source.dataView = new DataView(source.buffer, source.byteOffset, source.byteLength))
 		if (this) {
 			currentDecoder = this
+			packedValues = this.sharedValues &&
+				(this.pack ? new Array(this.maxPrivatePackedValues || 16).concat(this.sharedValues) :
+				this.sharedValues)
 			if (this.structures) {
 				currentStructures = this.structures
 				return checkedRead()
@@ -71,6 +75,7 @@ export class Decoder {
 			currentDecoder = defaultOptions
 			if (!currentStructures || currentStructures.length > 0)
 				currentStructures = []
+			packedValues = null
 		}
 		return checkedRead()
 	}
@@ -753,8 +758,9 @@ currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 }
 const packedTable = (read) => {
 	if (src[position++] != 0x84)
-		throw new Error('Packed shared structure must be followed by 4 element array')
-	packedValues = read() // shared items
+		throw new Error('Packed values structure must be followed by 4 element array')
+	let newPackedValues = read() // packed values
+	packedValues = packedValues ? newPackedValues.concat(packedValues.slice(newPackedValues.length)) : newPackedValues
 	packedValues.prefixes = read()
 	packedValues.suffixes = read()
 	return read() // read the rump

@@ -117,26 +117,26 @@ suite('CBOR basic tests', function(){
 		assert.deepEqual(deserialized, data)
 	})
 	test('encode/decode sample data with shared packing and records', function(){
-		let structures = []
-		let encoder = new Encoder({ structures, sharedPack: true, useRecords: true })
+		let encoder = new Encoder({ useRecords: true })
+		let finishPack = encoder.findCommonStringsToPack()
 		for (let i = 0; i < 20; i++) {
-			data = {
+			let data = {
 				shouldShare: 'same each time',
 				shouldShare2: 'same each time 2',
 				shouldntShare: 'different each time ' + i
 			}
 			if (i == 10)
-				encoder.setSharedPack(false)
+				finishPack({})
 			var serialized = encoder.encode(data)
 			var deserialized = encoder.decode(serialized)
 			assert.deepEqual(deserialized, data)
 		}
 	})
 	test('encode/decode sample data with individual packing, shared packing and records', function(){
-		let structures = []
-		let encoder = new Encoder({ structures, pack: true, sharedPack: true, useRecords: true })
+		let encoder = new Encoder({ pack: true, useRecords: true })
+		let finishPack = encoder.findCommonStringsToPack()
 		for (let i = 0; i < 20; i++) {
-			data = {
+			let data = {
 				shouldShare: 'same each time',
 				shouldShare2: 'same each time',
 				shouldntShare: 'different each time ' + i,
@@ -144,7 +144,7 @@ suite('CBOR basic tests', function(){
 				noPack: 'no packing ' + i,
 			}
 			if (i == 10)
-				encoder.setSharedPack(false)
+				finishPack({ threshold: 5 })
 			var serialized = encoder.encode(data)
 			var deserialized = encoder.decode(serialized)
 			assert.deepEqual(deserialized, data)

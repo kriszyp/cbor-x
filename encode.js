@@ -42,7 +42,15 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
-		let packedValues = options.sharedPack ? new Map() : null
+		let samplingPackedValues, packedObjectMap, sharedValues = options && options.sharedValues
+		let sharedPackedObjectMap
+		if (sharedValues) {
+			sharedPackedObjectMap = Object.create(null)
+			for (let i = 0, l = sharedValues.length; i < l; i++) {
+				sharedPackedObjectMap[sharedValues[i]] = i
+			}
+
+		}
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
@@ -99,23 +107,27 @@ export class Encoder extends Decoder {
 			if (hasSharedUpdate)
 				hasSharedUpdate = false
 			structures = sharedStructures || []
+			packedObjectMap = sharedPackedObjectMap
 			if (options.pack) {
-				serializationId++
-				if (!packedValues || ((serializationId & 0xf) == 0xf) && !options.sharedPack)
-					packedValues = new Map()
+				let packedValues = new Map()
 				packedValues.values = []
-				packedValues.nextPosition = 0
-				findRepetitiveStrings(value, encoder, packedValues, !encoder.useRecords)
+				packedValues.encoder = encoder
+				packedValues.maxValues = options.maxPrivatePackedValues || (sharedPackedObjectMap ? 16 : Infinity)
+				packedValues.objectMap = sharedPackedObjectMap || false
+				packedValues.samplingPackedValues = samplingPackedValues
+				findRepetitiveStrings(value, packedValues)
 				if (packedValues.values.length > 0) {
 					target[position++] = 0xd8 // one-byte tag
 					target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
 					writeArrayHeader(4)
-					let savedValues = packedValues
-					packedValues = null // hide this so we don't reference in string writing
-					encode(savedValues.values)
-					packedValues = savedValues
+					let valuesArray = packedValues.values
+					encode(valuesArray)
 					writeArrayHeader(0) // prefixes
 					writeArrayHeader(0) // suffixes
+					packedObjectMap = Object.create(sharedPackedObjectMap || null)
+					for (let i = 0, l = valuesArray.length; i < l; i++) {
+						packedObjectMap[valuesArray[i]] = i
+					}
 				}
 			}
 			try {
@@ -132,13 +144,6 @@ export class Encoder extends Decoder {
 				}
 				return target.subarray(start, position) // position can change if we call encode again in saveStructures, so we get the buffer now
 			} finally {
-				if (packedValues && packedValues.sharedChars) {
-					let i = 0
-					let sharedString
-					while (sharedString = packedValues[i++]) {
-
-					}
-				}
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
 						serializationsSinceTransitionRebuild++
@@ -159,20 +164,39 @@ export class Encoder extends Decoder {
 						if (encoder.structures.length > maxSharedStructures) {
 							encoder.structures = encoder.structures.slice(0, maxSharedStructures)
 						}
+						let shared = encoder.structures || []
+						if (sharedValues) {
+							shared = shared.concat(sharedValues)
+						}
 
 						if (encoder.saveStructures(encoder.structures, lastSharedStructuresLength) === false) {
 							// get updated structures and try again if the update failed
 							encoder.structures = encoder.getStructures() || []
 							return encoder.encode(value)
 						}
-						lastSharedStructuresLength = encoder.structures.length
+						lastSharedStructuresLength = shared.length
 					}
 				}
 			}
 		}
-		this.setSharedPack(sharedPack) {
-			this.sharedPack = sharedPack
-			sharedStringValues = sharedPack ? new Map() : null
+		this.findCommonStringsToPack = () => {
+			samplingPackedValues = new Map()
+			if (!sharedPackedObjectMap)
+				sharedPackedObjectMap = Object.create(null)
+			return ({ threshold }) => {
+				threshold = threshold || 4
+				let position = this.pack ? options.maxPrivatePackedValues || 16 : 0
+				if (!sharedValues)
+					sharedValues = this.sharedValues = []
+				for (let [ key, status ] of samplingPackedValues) {
+					if (status.count > threshold) {
+						sharedPackedObjectMap[key] = position++
+						sharedValues.push(key)
+						hasSharedUpdate = true
+					}
+				}
+				samplingPackedValues = null
+			}
 		}
 		const encode = (value) => {
 			if (position > safeEnd)
@@ -181,22 +205,20 @@ export class Encoder extends Decoder {
 			var type = typeof value
 			var length
 			if (type === 'string') {
-				if (packedValues) {
-					let packedStatus = packedValues.get(value)
-					if (packedStatus) {
-						let packedPosition = packedStatus.position
-						if (packedPosition >= 0) {
-							if (packedPosition < 16)
-								target[position++] = packedPosition + 0xe0 // simple values, defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
-							else {
-								target[position++] = 0xc6 // tag 6 defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
-								if (packedPosition & 1)
-									encode((15 - packedPosition) >> 1)
-								else
-									encode((packedPosition - 16) >> 1)
-							}
-							return
-						} else if (packedStatus.serializationId != serializationId) {
+				if (packedObjectMap) {
+					let packedPosition = packedObjectMap[value]
+					if (packedPosition >= 0) {
+						if (packedPosition < 16)
+							target[position++] = packedPosition + 0xe0 // simple values, defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+						else {
+							target[position++] = 0xc6 // tag 6 defined in https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+							if (packedPosition & 1)
+								encode((15 - packedPosition) >> 1)
+							else
+								encode((packedPosition - 16) >> 1)
+						}
+						return
+/*						} else if (packedStatus.serializationId != serializationId) {
 							packedStatus.serializationId = serializationId
 							packedStatus.count = 1
 							if (options.sharedPack) {
@@ -209,13 +231,15 @@ export class Encoder extends Decoder {
 
 								}
 							}
-						} // else any in-doc incrementation?
-					} else {
-						packedValues.set(value, {
-							isShared: false,
-							serializationId,
-							count: 1,
-						})
+						} // else any in-doc incrementation?*/
+					} else if (samplingPackedValues && !options.pack) {
+						let status = samplingPackedValues.get(value)
+						if (status)
+							status.count++
+						else
+							samplingPackedValues.set(value, {
+								count: 1,
+							})
 					}
 				}
 				let strLength = value.length
@@ -658,29 +682,30 @@ function writeArrayHeader(length) {
 	}
 }
 
-function findRepetitiveStrings(value, encoder, packedValues, includeKeys) {
+function findRepetitiveStrings(value, packedValues) {
 	switch(typeof value) {
 		case 'string':
 			if (value.length > 3) {
+				if (packedValues.objectMap[value] > -1 || packedValues.values.length >= packedValues.maxValues)
+					return
 				let packedStatus = packedValues.get(value)
 				if (packedStatus) {
-					if (packedStatus.serializationId == serializationId) {
-						if (++packedStatus.count == 2) {
-							packedValues.values.push(value)
-							packedStatus.position = packedValues.nextPosition++
-						}
-					} else {	
-						packedStatus.serializationId = serializationId
-						packedStatus.count = 1
-						packedStatus.position = -1
+					if (++packedStatus.count == 2) {
+						packedValues.values.push(value)
 					}
 				} else {
 					packedValues.set(value, {
-						isShared: false,
-						serializationId,
 						count: 1,
-						position: -1
 					})
+					if (packedValues.samplingPackedValues) {
+						let status = packedValues.samplingPackedValues.get(value)
+						if (status)
+							status.count++
+						else
+							packedValues.samplingPackedValues.set(value, {
+								count: 1,
+							})
+					}
 				}
 			}
 			break
@@ -688,15 +713,16 @@ function findRepetitiveStrings(value, encoder, packedValues, includeKeys) {
 			if (value) {
 				if (value instanceof Array) {
 					for (let i = 0, l = value.length; i < l; i++) {
-						findRepetitiveStrings(value[i], encoder, packedValues, includeKeys)
+						findRepetitiveStrings(value[i], packedValues)
 					}
 
 				} else {
+					let includeKeys = !packedValues.encoder.useRecords
 					for (var key in value) {
 						if (value.hasOwnProperty(key)) {
 							if (includeKeys)
-								findRepetitiveStrings(key, encoder, packedValues)
-							findRepetitiveStrings(value[key], encoder, packedValues, includeKeys)
+								findRepetitiveStrings(key, packedValues)
+							findRepetitiveStrings(value[key], packedValues)
 						}
 					}
 				}
