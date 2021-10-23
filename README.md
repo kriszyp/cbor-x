@@ -138,6 +138,11 @@ decodeMultiple(data, (value) => {
 })
 ```
 
+CBOR Packing
+[Packed CBOR](https://datatracker.ietf.org/doc/html/draft-ietf-cbor-packed) is additional specification for CBOR which allows for compact encoding of data that has repeated values. Cbor-x supports decoding packed CBOR, no or flags/options needed. Cbor-x can also optionally generate packed CBOR (with the `pack` option), which will cause the encoder to look for repeated strings in a data structure that is being encoded, and store the strings in a packed table that can be referenced, to reduce encoding size. This involves extra overhead and reduces encoding performance, and generally does not yield as much compaction as standard compression tools. However, this is can be much faster than encoding plus compression, while still providing some level of reduction in encoding size. In addition to size reduction, packed CBOR is also usually faster to decode (assuming that some repetitive values could be found/packed).
+
+Cbor-x also has in-progress effort to support shared packed tables.
+
 ## Options
 The following options properties can be provided to the Encoder or Decoder constructor:
 
@@ -146,6 +151,7 @@ The following options properties can be provided to the Encoder or Decoder const
 * `structuredClone` - This enables the structured cloning extensions that will encode object/cyclic references and additional built-in types/classes.
 * `mapsAsObjects` - If `true`, this will decode CBOR maps and JS `Object`s with the map entries decoded to object properties. If `false`, maps are decoded as JavaScript `Map`s. This is disabled by default if `useRecords` is enabled (`Map`s are preserved since they are distinct from records), and is enabled by default if `useRecords` is disabled.
 * `useFloat32` - This will enable cbor-x to encode non-integer numbers as 32-bit (4 byte) floating point numbers. See next section for possible values.
+* `pack` - This will enable [CBOR packing](https://datatracker.ietf.org/doc/html/draft-ietf-cbor-packed) for encoding, as described above.
 * `variableMapSize` - This will use varying map size definition (from single-byte to full 32-bit representation) based on the number of keys when encoding objects, which yields slightly more compact encodings (for small objects), but is typically 5-10% slower during encoding. This is only relevant when record extension is disabled.
 * `copyBuffers` - When decoding a CBOR message with binary data (Buffers are encoded as binary data), copy the buffer rather than providing a slice/view of the buffer. If you want your input data to be collected or modified while the decoded embedded buffer continues to live on, you can use this option (there is extra overhead to copying).
 * `useTimestamp32` - Encode JS `Date`s in 32-bit format when possible by dropping the milliseconds. This is a more efficient encoding of dates. You can also cause dates to use 32-bit format by manually setting the milliseconds to zero (`date.setMilliseconds(0)`).
