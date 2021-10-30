@@ -124,7 +124,7 @@ let encoder = new Encoder({
 Cbor-x will automatically add and saves structures as it encounters any new object structures (up to a limit of 64). It will always add structures in incremental/compatible way: Any object encoded with an earlier structure can be decoded with a later version (as long as it is persisted).
 
 ### Reading Multiple Values
-If you have a buffer with multiple values sequentially encoded, you can choose to parse and read multiple values. This can be done using the `unpackMultiple` function/method, which can return an array of all the values it can sequentially parse within the provided buffer. For example:
+If you have a buffer with multiple values sequentially encoded, you can choose to parse and read multiple values. This can be done using the `decodeMultiple` function/method, which can return an array of all the values it can sequentially parse within the provided buffer. For example:
 ```js
 let data = new Uint8Array([1, 2, 3]) // encodings of values 1, 2, and 3
 let values = decodeMultiple(data) // [1, 2, 3]
