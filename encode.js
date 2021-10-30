@@ -1,4 +1,3 @@
-import { write } from 'fs'
 import { Decoder, mult10, Tag, typedArrays, addExtension as decodeAddExtension } from './decode.js'
 let textEncoder
 try {
