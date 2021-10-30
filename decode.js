@@ -86,7 +86,9 @@ export class Decoder {
 			sequentialMode = true
 			let value = this ? this.decode(source, size) : defaultDecoder.decode(source, size)
 			if (forEach) {
-				forEach(value)
+				if (forEach(value) === false) {
+					return
+				}
 				while(position < size) {
 					lastPosition = position
 					if (forEach(checkedRead()) === false) {
