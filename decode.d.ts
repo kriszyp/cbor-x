@@ -37,3 +37,5 @@ export function decode(messagePack: Buffer | Uint8Array): any
 export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 export function addExtension(extension: Extension): void
 export function roundFloat32(float32Number: number): number
+export let isNativeAccelerationEnabled: boolean
+

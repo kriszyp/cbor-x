@@ -59,7 +59,15 @@ export class Decoder {
 		// this provides cached access to the data view for a buffer if it is getting reused, which is a recommend
 		// technique for getting data from a database where it can be copied into an existing buffer instead of creating
 		// new ones
-		dataView = source.dataView || (source.dataView = new DataView(source.buffer, source.byteOffset, source.byteLength))
+		try {
+			dataView = source.dataView || (source.dataView = new DataView(source.buffer, source.byteOffset, source.byteLength))
+		} catch(error) {
+			// if it doesn't have a buffer, maybe it is the wrong type of object
+			src = null
+			if (source instanceof Uint8Array)
+				throw error
+			throw new Error('Source must be a Uint8Array or Buffer but was a ' + ((source && typeof source == 'object') ? source.constructor.name : typeof source))
+		}
 		if (this) {
 			currentDecoder = this
 			packedValues = this.sharedValues &&
@@ -182,10 +190,11 @@ export function read() {
 					position += 8
 					return value
 				}
-				if (currentDecoder.uint64AsNumber)
-					return src[position++] * 0x100000000000000 + src[position++] * 0x1000000000000 + src[position++] * 0x10000000000 + src[position++] * 0x100000000 +
-						src[position++] * 0x1000000 + (src[position++] << 16) + (src[position++] << 8) + src[position++]
-				token = dataView.getBigUint64(position)
+				if (currentDecoder.int64AsNumber) {
+					token = dataView.getUint32(position) * 0x100000000
+					token += dataView.getUint32(position + 4)
+				} else
+					token = dataView.getBigUint64(position)
 				position += 8
 				break
 			case 0x1f: 
@@ -375,7 +384,9 @@ let readString8 = readStringJS
 let readString16 = readStringJS
 let readString32 = readStringJS
 
+export let isNativeAccelerationEnabled = false
 export function setExtractor(extractStrings) {
+	isNativeAccelerationEnabled = true
 	readFixedString = readString(1)
 	readString8 = readString(2)
 	readString16 = readString(3)

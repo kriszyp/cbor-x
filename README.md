@@ -5,6 +5,7 @@
 [![decode](https://img.shields.io/badge/decode-2GB%2Fs-yellow)](benchmark.md)
 [![types](https://img.shields.io/npm/types/cbor-x)](README.md)
 [![module](https://img.shields.io/badge/module-ESM%2FCJS-blue)](README.md)
+[![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
 The cbor-x package is an extremely fast CBOR NodeJS/JavaScript implementation. Currently, it is significantly faster than any other known implementations, faster than Avro (for JS), and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x), [RFC-8746](https://tools.ietf.org/html/rfc8746) and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, several times faster than other JS implementations, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
 
@@ -158,6 +159,7 @@ The following options properties can be provided to the Encoder or Decoder const
 * `sequential` - Encode structures in serialized data, and reference previously encoded structures with expectation that decoder will read the encoded structures in the same order as encoded, with `unpackMultiple`.
 * `largeBigIntToFloat` - If a bigint needs to be encoded that is larger than will fit in 64-bit integers, it will be encoded as a float-64 (otherwise will throw a RangeError).
 * `useTag259ForMaps` - This flag indicates if [tag 259 (explicit maps)](https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec--explicit-maps.md) should be used to encode JS `Map`s. When using records is enabled, this is disabled by default, since plain objects are encoded with record structures and unambigiously differentiated from `Map`s, which are encoded as CBOR maps. Without using records, this enabled by default and is necessary to distinguish plain objects from `Map`s (but can be disabled by setting this to `false`).
+* `int64AsNumber` - This will decode uint64 and int64 numbers as standard JS numbers rather than as bigint numbers.
 
 ### 32-bit Float Options
 By default all non-integer numbers are serialized as 64-bit float (double). This is fast, and ensures maximum precision. However, often real-world data doesn't not need 64-bits of precision, and using 32-bit encoding can be much more space efficient. There are several options that provide more efficient encodings. Using the decimal rounding options for encoding and decoding provides lossless storage of common decimal representations like 7.99, in more efficient 32-bit format (rather than 64-bit). The `useFloat32` property has several possible options, available from the module as constants:
@@ -175,6 +177,15 @@ In addition, msgpackr exports a `roundFloat32(number)` function that can be used
 
 ## Performance
 Cbor-x is fast. Really fast. Here is comparison with the next fastest JS projects using the benchmark tool from `msgpack-lite` (and the sample data is from some clinical research data we use that has a good mix of different value types and structures). It also includes comparison to V8 native JSON functionality, and JavaScript Avro (`avsc`, a very optimized Avro implementation):
+
+### Native Acceleration
+Cbor-x employs an optional native node-addon to accelerate the parsing of strings. This should be automatically installed and utilized on NodeJS. However, you can verify this by checking the `isNativeAccelerationEnabled` property that is exported from cbor-x. If this is `false`, the `cbor-extract` package may not have been properly installed, and you may want to verify that it is installed correctly:
+```js
+import { isNativeAccelerationEnabled } from 'cbor-x'
+if (!isNativeAccelerationEnabled)
+	console.warn('Native acceleration not enabled, verify that install finished properly')
+```
+
 
 operation                                                  |   op   |   ms  |  op/s
 ---------------------------------------------------------- | ------: | ----: | -----:

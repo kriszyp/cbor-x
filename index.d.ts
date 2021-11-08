@@ -1,4 +1,4 @@
-export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource, roundFloat32 } from './decode.js'
+export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource, roundFloat32, isNativeAccelerationEnabled } from './decode.js'
 export { Encoder, encode } from './encode.js'
 import { Transform, Readable } from 'stream'
 
