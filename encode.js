@@ -739,7 +739,9 @@ function findRepetitiveStrings(value, packedValues) {
 }
 
 extensionClasses = [ Date, Set, Error, RegExp, ArrayBuffer, ByteArray,
-	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array, BigUint64Array, Int8Array, Int16Array, Int32Array, BigInt64Array,
+	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
+	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
+	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
 	Float32Array, Float64Array]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
