@@ -906,8 +906,6 @@ export const mult10 = new Array(147) // this is a table matching binary exponent
 for (let i = 0; i < 256; i++) {
 	mult10[i] = +('1e' + Math.floor(45.15 - i * 0.30103))
 }
-export const useRecords = false
-export const mapsAsObjects = true
 let defaultDecoder = new Decoder({ useRecords: false })
 export const decode = defaultDecoder.decode
 export const decodeMultiple = defaultDecoder.decodeMultiple
