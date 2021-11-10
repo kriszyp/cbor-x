@@ -68,7 +68,7 @@ export class Decoder {
 				throw error
 			throw new Error('Source must be a Uint8Array or Buffer but was a ' + ((source && typeof source == 'object') ? source.constructor.name : typeof source))
 		}
-		if (this) {
+		if (this instanceof Decoder) {
 			currentDecoder = this
 			packedValues = this.sharedValues &&
 				(this.pack ? new Array(this.maxPrivatePackedValues || 16).concat(this.sharedValues) :
