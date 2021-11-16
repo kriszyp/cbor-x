@@ -18,7 +18,7 @@ var inflateSync = zlib.inflateSync
 //var deflateSync = zlib.brotliCompressSync
 //var inflateSync = zlib.brotliDecompressSync
 var constants = zlib.constants
-
+//require('inspector').open(9330, null, true);
 msgpack5 = msgpack5 && msgpack5();
 msgpack_codec = msgpack_codec && msgpack_codec.msgpack;
 what_the_pack = what_the_pack && what_the_pack.initialize(2**20);
@@ -53,7 +53,7 @@ if (cborX) {
   let encoder = new cborX.Encoder({ useRecords: false, pack: true })
   buf = bench('cbor-x packed and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
   console.log('size', buf.length)
-  
+  debugger
   buf = bench('cbor-x packed: encoder.encode(obj);', encoder.encode.bind(encoder), data);
 
   obj = bench('cbor-x packed: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
@@ -61,18 +61,18 @@ if (cborX) {
   console.log('size', buf.length)
 
 
-  encoder = new cborX.Encoder({ useRecords: true, pack: true })
-  buf = bench('cbor-x packed and useRecords and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
-  console.log('size', buf.length)
+  encoder = new cborX.Encoder({ useStringRefs: true, useRecords: false })
+//  buf = bench('cbor-x useStringRefs and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
+  //console.log('size', buf.length)
   
-  buf = bench('cbor-x packed and useRecords: encoder.encode(obj);', encoder.encode.bind(encoder), data);
+  buf = bench('cbor-x useStringRefs: encoder.encode(obj);', encoder.encode.bind(encoder), data);
 
-  obj = bench('cbor-x packed and useRecords: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
+  obj = bench('cbor-x useStringRefs: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
   test(obj);
   console.log('size', buf.length)
 
-  buf = bench('require("cbor-x").encode(obj) and compress;', (data) => deflateSync(cborX.encode(data)), data);
-  console.log('size', buf.length)
+//  buf = bench('require("cbor-x").encode(obj) and compress;', (data) => deflateSync(cborX.encode(data)), data);
+  //console.log('size', buf.length)
   buf = bench('require("cbor-x").encode(obj);', cborX.encode, data);
 //    buf = bench('require("msgpack").serialize(obj);', data => {let result = packr.serialize(data); packr.resetMemory(); return result;}, data);
 
@@ -86,10 +86,10 @@ if (cborX) {
   console.log('size', buf.length)
   
   buf = bench('cbor-x w/ shared structures: encoder.encode(obj);', encoder.encode.bind(encoder), data);
+  console.log('size', buf.length)
 
   obj = bench('cbor-x w/ shared structures: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
   test(obj);
-  console.log('size', buf.length)
 }
 if (JSON) {
   buf = bench('buf = Buffer(JSON.stringify(obj));', JSON_stringify, data);

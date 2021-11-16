@@ -1,6 +1,6 @@
 import * as CBOR from '../index.js'
 import chai from 'chai'
-import sampleData from './example4.json'
+import sampleData from './example4.json' assert { type: 'json' }
 //import inspector from 'inspector'; inspector.open(9229, null, true); debugger
 function tryRequire(module) {
 	try {
@@ -118,7 +118,7 @@ suite('CBOR basic tests', function(){
 	test('encode/decode sample data with packing and records', function(){
 		var data = sampleData
 		let structures = []
-		let encoder = new Encoder({ structures, pack: true, useRecords: true })
+		let encoder = new Encoder({ useStringRefs: true })
 		var serialized = encoder.encode(data)
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
@@ -435,7 +435,7 @@ suite('CBOR basic tests', function(){
 			useFloat32: DECIMAL_FIT
 		})
 		var serialized = encoder.encode(data)
-		assert.equal(serialized.length, 35)
+		assert.equal(serialized.length, 34)
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})

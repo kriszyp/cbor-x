@@ -7,7 +7,8 @@ let srcEnd
 let position = 0
 let alreadySet
 const EMPTY_ARRAY = []
-const RECORD_TAG_ID = 0x69
+const LEGACY_RECORD_TAG_ID = 105
+const RECORD_TAG_ID = 0x7264
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
@@ -24,7 +25,7 @@ let currentExtensionRanges = []
 let packedValues
 let dataView
 let restoreMapsAsObject
-let sharedValues
+let stringRefs
 let defaultOptions = {
 	useRecords: false,
 	mapsAsObjects: true
@@ -202,6 +203,7 @@ export function read() {
 				switch(majorType) {
 					case 2: // byte string
 					case 3: // text string
+						throw new Error('Indefinite length not supported for byte or text strings')
 					case 4: // array
 						let array = []
 						let value, i = 0
@@ -213,7 +215,7 @@ export function read() {
 						let key
 						if (currentDecoder.mapsAsObjects) {
 							let object = {}
-							while ((key = readKey()) != STOP_CODE)
+							while ((key = read()) != STOP_CODE)
 								object[key] = read()
 							return object
 						} else {
@@ -243,16 +245,26 @@ export function read() {
 		case 2: // buffer
 			return readBin(token)
 		case 3: // string
+			let string
 			if (srcStringEnd >= position) {
-				return srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
+				string = srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
 			}
-			if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
+			else if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
 				// for small blocks, avoiding the overhead of the extract call is helpful
-				let string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
-				if (string != null)
-					return string
+				string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
+				if (string == null)
+					string = readFixedString(token)
+			} else
+				string = readFixedString(token)
+			if (stringRefs) {
+				let id = stringRefs.length
+				let minLength = id <= 23 ? 3 : id <= 255 ? 4 : id <= 65535 ? 5 : 7
+				if (string.length >= minLength) {
+					//console.log('get',id, string)
+					stringRefs.push(string)
+				}
 			}
-			return readFixedString(token)
+			return string
 		case 4: // array
 			let array = new Array(token)
 			for (let i = 0; i < token; i++) {
@@ -263,7 +275,7 @@ export function read() {
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
 				for (let i = 0; i < token; i++) {
-					object[readKey()] = read()
+					object[read()] = read()
 				}
 				return object
 			} else {
@@ -278,47 +290,46 @@ export function read() {
 				return map
 			}
 		case 6: // extension
-			if ((token >> 8) == RECORD_TAG_ID) { // record structures
-				let structure = currentStructures[token & 0xff]
+			let structure = currentStructures[token] // check record structures first
+			if (structure) {
+				if (!structure.read)
+					structure.read = createStructureReader(structure)
+				return structure.read()
+			} else if (currentDecoder.getStructures && token >= 8 && (token < 16 ||
+						(token > 0x80 && token < 0xc0) || (token > 0x130 && token < 0x4000))) {
+				let updatedStructures = saveState(() => {
+					// save the state in case getStructures modifies our buffer
+					src = null
+					return currentDecoder.getStructures()
+				})
+				if (currentStructures === true)
+					currentDecoder.structures = currentStructures = updatedStructures
+				else
+					currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
+				structure = currentStructures[token]
 				if (structure) {
 					if (!structure.read)
 						structure.read = createStructureReader(structure)
 					return structure.read()
-				} else if (currentDecoder.getStructures) {
-					let updatedStructures = saveState(() => {
-						// save the state in case getStructures modifies our buffer
-						src = null
-						return currentDecoder.getStructures()
-					})
-					if (currentStructures === true)
-						currentDecoder.structures = currentStructures = updatedStructures
-					else
-						currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
-					structure = currentStructures[token & 0xff]
-					if (structure) {
-						if (!structure.read)
-							structure.read = createStructureReader(structure)
-						return structure.read()
-					} else
-						return token
 				} else
 					return token
+			}
+			if (token == RECORD_TAG_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+				return recordDefinition(read())
+			let extension = currentExtensions[token]
+			if (extension) {
+				if (extension.handlesRead)
+					return extension(read)
+				else
+					return extension(read())
 			} else {
-				let extension = currentExtensions[token]
-				if (extension) {
-					if (extension.handlesRead)
-						return extension(read)
-					else
-						return extension(read())
-				} else {
-					let input = read()
-					for (let i = 0; i < currentExtensionRanges.length; i++) {
-						let value = currentExtensionRanges[i](token, input)
-						if (value !== undefined)
-							return value
-					}
-					return new Tag(input)
+				let input = read()
+				for (let i = 0; i < currentExtensionRanges.length; i++) {
+					let value = currentExtensionRanges[i](token, input)
+					if (value !== undefined)
+						return value
 				}
+				return new Tag(input)
 			}
 		case 7: // fixed value
 			switch (token) {
@@ -326,7 +337,7 @@ export function read() {
 				case 0x15: return true
 				case 0x16: return null
 				case 0x17: return; // undefined
-				case 0x1f: 
+				case 0x1f:
 				default:
 					let packedValue = packedValues[token]
 					if (packedValue !== undefined)
@@ -749,11 +760,10 @@ currentExtensions[3] = (buffer) => {
 }
 
 // the registration of the record definition extension (tag 105)
-const recordDefinition = () => {
-	let definition = read()
+const recordDefinition = (definition) => {
 	let structure = definition[0]
 	let id = definition[1]
-	currentStructures[id & 0xff] = structure
+	currentStructures[id] = structure
 	structure.read = createStructureReader(structure)
 	let object = {}
 	for (let i = 2,l = definition.length; i < l; i++) {
@@ -762,9 +772,7 @@ const recordDefinition = () => {
 	}
 	return object
 }
-
-recordDefinition.handlesRead = true
-currentExtensions[RECORD_TAG_ID] = recordDefinition
+currentExtensions[LEGACY_RECORD_TAG_ID] = recordDefinition
 
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
@@ -786,11 +794,26 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
 	throw new Error('No support for non-integer packed references yet')
 }
+currentExtensions[25] = (id) => {
+	return stringRefs[id]
+}
+currentExtensions[256] = (read) => {
+	stringRefs = []
+	try {
+		return read()
+	} finally {
+		stringRefs = null
+	}
+}
+currentExtensions[256].handlesRead = true
 
-currentExtensions[40009] = (id) => {
-	// id extension (for structured clones)
-	if (!referenceMap)
+currentExtensions[28] = (read) => { 
+	// shareable http://cbor.schmorp.de/value-sharing (for structured clones)
+	if (!referenceMap) {
 		referenceMap = new Map()
+		referenceMap.id = 0
+	}
+	let id = referenceMap.id++
 	let token = src[position]
 	let target
 	// TODO: handle Maps, Sets, and other types that can cycle; this is complicated, because you potentially need to read
@@ -808,9 +831,10 @@ currentExtensions[40009] = (id) => {
 	refEntry.target = targetProperties // the placeholder wasn't used, replace with the deserialized one
 	return targetProperties // no cycle, can just use the returned read object
 }
+currentExtensions[28].handlesRead = true
 
-currentExtensions[40010] = (id) => {
-	// pointer extension (for structured clones)
+currentExtensions[29] = (id) => {
+	// sharedref http://cbor.schmorp.de/value-sharing (for structured clones)
 	let refEntry = referenceMap.get(id)
 	refEntry.used = true
 	return refEntry.target

@@ -7,7 +7,7 @@ let extensions, extensionClasses
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
-const RECORD_STARTING_ID_PREFIX = 0x69 // tag 105/0x69
+const RECORD_DEFINITION_ID = 0x7264 // 'rd'
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
 let serializationId = 1
@@ -49,11 +49,11 @@ export class Encoder extends Decoder {
 			for (let i = 0, l = sharedValues.length; i < l; i++) {
 				sharedPackedObjectMap[sharedValues[i]] = i
 			}
-
 		}
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
+		let stringRefMap
 
 		this.encode = function(value, encodeOptions) {
 			if (!target) {
@@ -128,11 +128,20 @@ export class Encoder extends Decoder {
 					}
 				}
 			}
+			if (encoder.useStringRefs) {
+				stringRefMap = new Map()
+				stringRefMap.nextId = 0
+				target[position++] = 0xd9 // two-byte tag
+				target[position++] = 1 // tag 256 http://cbor.schmorp.de/stringref
+				target[position++] = 0
+			} else
+				stringRefMap = null
+
 			try {
 				encode(value)
 				encoder.offset = position // update the offset so next serialization doesn't write over our buffer, but can continue writing to same buffer sequentially
 				if (referenceMap && referenceMap.idsToInsert) {
-					position += referenceMap.idsToInsert.length * 8
+					position += referenceMap.idsToInsert.length * 2
 					if (position > safeEnd)
 						makeRoom(position)
 					encoder.offset = position
@@ -246,6 +255,20 @@ export class Encoder extends Decoder {
 							samplingPackedValues.set(value, {
 								count: 1,
 							})
+					}
+				}
+				if (stringRefMap) {
+					let minLength = stringRefMap.nextId <= 23 ? 3 : stringRefMap.nextId <= 255 ? 4 : stringRefMap.nextId <= 65535 ? 5 : 7
+					if (value.length >= minLength) {
+						let ref = stringRefMap.get(value)
+						if (ref > -1) {
+							target[position++] = 0xd8
+							target[position++] = 25 // http://cbor.schmorp.de/stringref tag
+							return encode(ref)
+						} else {
+							//console.log('set',stringRefMap.nextId, value)
+							stringRefMap.set(value, stringRefMap.nextId++)
+						}
 					}
 				}
 				let strLength = value.length
@@ -375,16 +398,16 @@ export class Encoder extends Decoder {
 					if (referenceMap) {
 						let referee = referenceMap.get(value)
 						if (referee) {
-							if (!referee.id) {
+							target[position++] = 0xd8
+							target[position++] = 29 // http://cbor.schmorp.de/value-sharing
+							target[position++] = 0x19 // 16-bit uint
+							if (!referee.references) {
 								let idsToInsert = referenceMap.idsToInsert || (referenceMap.idsToInsert = [])
-								referee.id = idsToInsert.push(referee)
+								referee.references = []
+								idsToInsert.push(referee)
 							}
-							target[position++] = 0xd9
-							target[position++] = 40010 >> 8
-							target[position++] = 40010 & 0xff
-							target[position++] = 0x1a // uint32
-							targetView.setUint32(position, referee.id)
-							position += 4
+							referee.references.push(position - start)
+							position += 2 // TODO: also support 32-bit
 							return
 						} else 
 							referenceMap.set(value, { offset: position - start })
@@ -588,9 +611,16 @@ export class Encoder extends Decoder {
 			}
 			let recordId = transition[RECORD_SYMBOL]
 			if (recordId !== undefined) {
-				target[position++] = 0xd9 // tag two byte
-				target[position++] = RECORD_STARTING_ID_PREFIX
-				target[position++] = recordId
+				if (recordId < 0x18)
+					target[position++] = 0xc0 | recordId
+				else if (recordId < 0x100) {
+					target[position++] = 0xd8
+					target[position++] = recordId
+				} else {
+					target[position++] = 0xd9
+					target[position++] = recordId >> 8
+					target[position++] = recordId & 0xff
+				}
 			} else {
 				recordId = structures.nextId++
 				if (!recordId) {
@@ -603,13 +633,20 @@ export class Encoder extends Decoder {
 				transition[RECORD_SYMBOL] = recordId
 				structures[recordId] = keys
 				if (sharedStructures && sharedStructures.length <= maxSharedStructures) {
-					target[position++] = 0xd9 // tag two byte
-					target[position++] = RECORD_STARTING_ID_PREFIX
-					target[position++] = recordId // tag number
+					if (recordId < 0x18)
+						target[position++] = 0xc0 | recordId
+					else if (recordId < 0x100) {
+						target[position++] = 0xd8
+						target[position++] = recordId
+					} else {
+						target[position++] = 0xd9
+						target[position++] = recordId >> 8
+						target[position++] = recordId & 0xff
+					}
 					hasSharedUpdate = true
 				} else {
-					target[position++] = 0xd8
-					target[position++] = RECORD_STARTING_ID_PREFIX
+					targetView.setUint32(position, 0xd9726400) // tag two byte, then record definition id
+					position += 3
 					if (newTransitions)
 						transitionsCount += serializationsSinceTransitionRebuild * newTransitions
 					// record the removal of the id, we can maintain our shared structure
@@ -618,9 +655,7 @@ export class Encoder extends Decoder {
 					recordIdsToRemove.push(transition)
 					writeArrayHeader(length + 2)
 					encode(keys)
-					target[position++] = 0x19 // uint16
-					target[position++] = RECORD_STARTING_ID_PREFIX
-					target[position++] = recordId
+					encode(recordId)
 					// now write the values
 					for (let i =0; i < length; i++)
 						encode(object[keys[i]])
@@ -835,23 +870,24 @@ function writeBuffer(buffer, makeRoom) {
 function insertIds(serialized, idsToInsert) {
 	// insert the ids that need to be referenced for structured clones
 	let nextId
-	let distanceToMove = idsToInsert.length * 8
+	let distanceToMove = idsToInsert.length * 2
 	let lastEnd = serialized.length - distanceToMove
 	idsToInsert.sort((a, b) => a.offset > b.offset ? 1 : -1)
+	for (let id = 0; id < idsToInsert.length; id++) {
+		let referee = idsToInsert[id]
+		referee.id = id
+		for (let position of referee.references) {
+			serialized[position++] = id >> 8
+			serialized[position] = id & 0xff
+		}
+	}
 	while (nextId = idsToInsert.pop()) {
 		let offset = nextId.offset
-		let id = nextId.id
 		serialized.copyWithin(offset + distanceToMove, offset, lastEnd)
-		distanceToMove -= 8
+		distanceToMove -= 2
 		let position = offset + distanceToMove
-		serialized[position++] = 0xd9
-		serialized[position++] = 40009 >> 8
-		serialized[position++] = 40009 & 0xff
-		serialized[position++] = 0x1a // uint32
-		serialized[position++] = id >> 24
-		serialized[position++] = (id >> 16) & 0xff
-		serialized[position++] = (id >> 8) & 0xff
-		serialized[position++] = id & 0xff
+		serialized[position++] = 0xd8
+		serialized[position++] = 28 // http://cbor.schmorp.de/value-sharing
 		lastEnd = offset
 	}
 	return serialized

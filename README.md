@@ -7,7 +7,7 @@
 [![module](https://img.shields.io/badge/module-ESM%2FCJS-blue)](README.md)
 [![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
-The cbor-x package is an extremely fast and conformant CBOR NodeJS/JavaScript implementation. Currently, it is over 3-10x faster than any another CBOR JS implementation (including cbor-js and cborg), faster than Avro (for JS), and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), [RFC-8746](https://tools.ietf.org/html/rfc8746), [RFC-8742](https://datatracker.ietf.org/doc/html/rfc8742), [Packed CBOR](https://www.ietf.org/id/draft-ietf-cbor-packed-03.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x),  and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
+The cbor-x package is an extremely fast and conformant CBOR NodeJS/JavaScript implementation. Currently, it is over 3-10x faster than any another CBOR JS implementation (including cbor-js and cborg) and faster than most MessagePack encoders, Avro, and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), [RFC-8746](https://tools.ietf.org/html/rfc8746), [RFC-8742](https://datatracker.ietf.org/doc/html/rfc8742), [Packed CBOR](https://www.ietf.org/id/draft-ietf-cbor-packed-03.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x),  and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
 
 ## Basic Usage
 Install on NodeJS with:
@@ -24,7 +24,7 @@ let data = decode(serializedAsBuffer);
 This `encode` function will generate standard CBOR without any extensions that should be compatible with any standard CBOR parser/decoder. It will serialize JavaScript objects as CBOR `map`s by default. The `decode` function will deserialize CBOR `map`s as an `Object` with the properties from the map. The cbor-x package runs on any modern JS platform, but does have additional optimizations for NodeJS usage (and will use a node addon for performance boost as an optional dependency).
 
 ## Deno Usage
-CBOR modules are standard ESM modules and is registered in the deno.land registry at https://deno.land/x/cbor. can be loaded directly from deno.land (https://deno.land/x/cbor@v0.9.4/index.js). The standard encode and decode functionality is available on Deno, like other platforms.
+CBOR modules are standard ESM modules and is registered in the deno.land registry at https://deno.land/x/cbor. can be loaded directly from deno.land. The standard encode and decode functionality is available on Deno, like other platforms.
 
 ### Streams
 We can use the including streaming functionality (which further improves performance). The `EncoderStream` is a NodeJS transform stream that can be used to serialize objects to a binary stream (writing to network/socket, IPC, etc.), and the `DecoderStream` can be used to deserialize objects from a binary sream (reading from network/socket, etc.):
@@ -293,7 +293,7 @@ Here is a list of CBOR tags that are supported for decoding:
 
 ## Alternate Encoding/Package
 The high-performance serialization and deserialization algorithms in this package are also available in the [msgpackr](https://github.com/kriszyp/msgpackr) for the MessagePack format, with the same API and design. A quick summary of the pros and cons of using MessagePack vs CBOR are:
-* MessagePack has wider adoption, and, at least with this implementation is slightly more efficient (by roughly 1%, but YMMV).
+* MessagePack has wider adoption and msgpackr has broader usage.
 * CBOR has an [official IETF standardization track](https://www.rfc-editor.org/rfc/rfc8949.html), and the record extensions is conceptually/philosophically a better fit for CBOR tags.
 
 ## License
