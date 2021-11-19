@@ -25,7 +25,6 @@ let currentExtensionRanges = []
 let packedValues
 let dataView
 let restoreMapsAsObject
-let stringRefs
 let defaultOptions = {
 	useRecords: false,
 	mapsAsObjects: true
@@ -245,26 +244,16 @@ export function read() {
 		case 2: // buffer
 			return readBin(token)
 		case 3: // string
-			let string
 			if (srcStringEnd >= position) {
-				string = srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
+				return srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
 			}
-			else if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
+			if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
 				// for small blocks, avoiding the overhead of the extract call is helpful
-				string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
-				if (string == null)
-					string = readFixedString(token)
-			} else
-				string = readFixedString(token)
-			if (stringRefs) {
-				let id = stringRefs.length
-				let minLength = id <= 23 ? 3 : id <= 255 ? 4 : id <= 65535 ? 5 : 7
-				if (string.length >= minLength) {
-					//console.log('get',id, string)
-					stringRefs.push(string)
-				}
+				let string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
+				if (string != null)
+					return string
 			}
-			return string
+			return readFixedString(token)
 		case 4: // array
 			let array = new Array(token)
 			for (let i = 0; i < token; i++) {
@@ -857,6 +846,7 @@ function combine(a, b) {
 		return a.concat(b)
 	return Object.assign({}, a, b)
 }
+const SHARED_DATA_TAG_ID = 0x73687264 // ascii 'shrd'
 currentExtensionRanges.push((tag, input) => {
 	if (tag >= 225 && tag <= 255)
 		return combine(packedTable.prefixes[tag - 224], input)
@@ -870,6 +860,12 @@ currentExtensionRanges.push((tag, input) => {
 		return combine(input, packedTable.suffixes[tag - 27639])
 	if (tag >= 1811940352 && tag <= 1879048191)
 		return combine(input, packedTable.suffixes[tag - 1811939328])
+	if (token == SHARED_DATA_TAG_ID) {// we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+		return {
+			packed: packedTable,
+			structures: currentStructures
+		}
+	}
 })
 
 export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')

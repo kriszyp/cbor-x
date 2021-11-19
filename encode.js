@@ -53,7 +53,6 @@ export class Encoder extends Decoder {
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
-		let stringRefMap
 
 		this.encode = function(value, encodeOptions) {
 			if (!target) {
@@ -128,15 +127,6 @@ export class Encoder extends Decoder {
 					}
 				}
 			}
-			if (encoder.useStringRefs) {
-				stringRefMap = new Map()
-				stringRefMap.nextId = 0
-				target[position++] = 0xd9 // two-byte tag
-				target[position++] = 1 // tag 256 http://cbor.schmorp.de/stringref
-				target[position++] = 0
-			} else
-				stringRefMap = null
-
 			try {
 				encode(value)
 				encoder.offset = position // update the offset so next serialization doesn't write over our buffer, but can continue writing to same buffer sequentially
@@ -255,20 +245,6 @@ export class Encoder extends Decoder {
 							samplingPackedValues.set(value, {
 								count: 1,
 							})
-					}
-				}
-				if (stringRefMap) {
-					let minLength = stringRefMap.nextId <= 23 ? 3 : stringRefMap.nextId <= 255 ? 4 : stringRefMap.nextId <= 65535 ? 5 : 7
-					if (value.length >= minLength) {
-						let ref = stringRefMap.get(value)
-						if (ref > -1) {
-							target[position++] = 0xd8
-							target[position++] = 25 // http://cbor.schmorp.de/stringref tag
-							return encode(ref)
-						} else {
-							//console.log('set',stringRefMap.nextId, value)
-							stringRefMap.set(value, stringRefMap.nextId++)
-						}
 					}
 				}
 				let strLength = value.length
