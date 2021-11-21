@@ -61,16 +61,6 @@ if (cborX) {
   console.log('size', buf.length)
 
 
-  encoder = new cborX.Encoder({ useStringRefs: true, useRecords: false })
-//  buf = bench('cbor-x useStringRefs and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
-  //console.log('size', buf.length)
-  
-  buf = bench('cbor-x useStringRefs: encoder.encode(obj);', encoder.encode.bind(encoder), data);
-
-  obj = bench('cbor-x useStringRefs: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
-  test(obj);
-  console.log('size', buf.length)
-
 //  buf = bench('require("cbor-x").encode(obj) and compress;', (data) => deflateSync(cborX.encode(data)), data);
   //console.log('size', buf.length)
   buf = bench('require("cbor-x").encode(obj);', cborX.encode, data);

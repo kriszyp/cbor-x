@@ -1,6 +1,6 @@
 import * as CBOR from '../index.js'
 import chai from 'chai'
-import sampleData from './example4.json' assert { type: 'json' }
+import sampleData from './example4.json'
 //import inspector from 'inspector'; inspector.open(9229, null, true); debugger
 function tryRequire(module) {
 	try {
@@ -435,7 +435,7 @@ suite('CBOR basic tests', function(){
 			useFloat32: DECIMAL_FIT
 		})
 		var serialized = encoder.encode(data)
-		assert.equal(serialized.length, 34)
+		assert.equal(serialized.length, 36)
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
