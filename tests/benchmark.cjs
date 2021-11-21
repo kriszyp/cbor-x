@@ -50,10 +50,14 @@ console.log(rpad("", COL1, "-"), "|", lpad(":", COL2, "-"), "|", lpad(":", COL3,
 var buf, obj;
 
 if (cborX) {
-  let encoder = new cborX.Encoder({ useRecords: false, pack: true })
-  buf = bench('cbor-x packed and compress: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
+  var encoder = new cborX.Encoder({  })
+  buf = bench('cbor-x w/ records: encoder.encode(obj);', encoder.encode.bind(encoder), data);
   console.log('size', buf.length)
-  debugger
+debugger
+  obj = bench('cbor-x w/ records: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
+  test(obj);
+
+  encoder = new cborX.Encoder({ useRecords: false, pack: true })
   buf = bench('cbor-x packed: encoder.encode(obj);', encoder.encode.bind(encoder), data);
 
   obj = bench('cbor-x packed: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
@@ -69,17 +73,7 @@ if (cborX) {
   obj = bench('require("cbor-x").decode(buf);', cborX.decode, buf);
   test(obj);
   console.log('size', buf.length)
-
-
-  encoder = new cborX.Encoder({  })
-  buf = bench('cbor-x w/ shared structures: encoder.encode(obj);', (data) => deflateSync(encoder.encode(data), { level: constants.Z_BEST_SPEED}), data);
-  console.log('size', buf.length)
   
-  buf = bench('cbor-x w/ shared structures: encoder.encode(obj);', encoder.encode.bind(encoder), data);
-  console.log('size', buf.length)
-
-  obj = bench('cbor-x w/ shared structures: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
-  test(obj);
 }
 if (JSON) {
   buf = bench('buf = Buffer(JSON.stringify(obj));', JSON_stringify, data);
