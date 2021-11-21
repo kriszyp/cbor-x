@@ -52,6 +52,17 @@
       }
     }
   },
+  "files": [
+    "/dist",
+    "*.md",
+    "decode.*",
+    "encode.*",
+    "index.*",
+    "iterators.js",
+    "stream.js",
+    "browser.js",
+    "node-index.js"
+  ],
   "optionalDependencies": {
     "cbor-extract": "^0.3.2"
   },
