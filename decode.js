@@ -7,8 +7,9 @@ let srcEnd
 let position = 0
 let alreadySet
 const EMPTY_ARRAY = []
-const LEGACY_RECORD_TAG_ID = 105
-const RECORD_TAG_ID = 0x7264
+const LEGACY_RECORD_INLINE_ID = 105
+const RECORD_DEFINITIONS_ID = 0xdffe
+const RECORD_INLINE_ID = 0xdfff // temporary first-come first-serve tag // proposed tag: 0x7265 // 're'
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
@@ -279,32 +280,34 @@ export function read() {
 				return map
 			}
 		case 6: // extension
-			let structure = currentStructures[token] // check record structures first
-			if (structure) {
-				if (!structure.read)
-					structure.read = createStructureReader(structure)
-				return structure.read()
-			} else if (currentDecoder.getStructures && token >= 8 && (token < 16 ||
-						(token > 0x80 && token < 0xc0) || (token > 0x130 && token < 0x4000))) {
-				let updatedStructures = saveState(() => {
-					// save the state in case getStructures modifies our buffer
-					src = null
-					return currentDecoder.getStructures()
-				})
-				if (currentStructures === true)
-					currentDecoder.structures = currentStructures = updatedStructures
-				else
-					currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
-				structure = currentStructures[token]
+			if (token >= RECORD_DEFINITIONS_ID) {
+				let structure = currentStructures[token & 0x1fff] // check record structures first
+				// At some point we may provide an option for dynamic tag assignment with a range like token >= 8 && (token < 16 || (token > 0x80 && token < 0xc0) || (token > 0x130 && token < 0x4000))
 				if (structure) {
 					if (!structure.read)
 						structure.read = createStructureReader(structure)
 					return structure.read()
-				} else
-					return token
+				} else if (currentDecoder.getStructures && token < 0x10000) {
+					let updatedStructures = saveState(() => {
+						// save the state in case getStructures modifies our buffer
+						src = null
+						return currentDecoder.getStructures()
+					})
+					if (currentStructures === true)
+						currentDecoder.structures = currentStructures = updatedStructures
+					else
+						currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
+					structure = currentStructures[token & 0x1fff]
+					if (structure) {
+						if (!structure.read)
+							structure.read = createStructureReader(structure)
+						return structure.read()
+					} else
+						return token
+				}
+				if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+					return recordDefinition(read())
 			}
-			if (token == RECORD_TAG_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
-				return recordDefinition(read())
 			let extension = currentExtensions[token]
 			if (extension) {
 				if (extension.handlesRead)
@@ -344,39 +347,45 @@ export function read() {
 }
 const validName = /^[a-zA-Z_$][a-zA-Z\d_$]*$/
 function createStructureReader(structure) {
-	let l = structure.length
 	function readObject() {
-		// This initial function is quick to instantiate, but runs slower. After several iterations pay the cost to build the faster function
-		if (readObject.count++ > 2) {
-			this.read = (new Function('a', 'r', 'return function(){a();return {' + structure.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}}'))(readArrayHeader, read)
-			return this.read()
+		// get the array size from the header
+		let length = src[position++]
+		//let majorType = token >> 5
+		length = length & 0x1f
+		if (length > 0x17) {
+			switch (length) {
+				case 0x18:
+					length = src[position++]
+					break
+				case 0x19:
+					length = dataView.getUint16(position)
+					position += 2
+					break
+				case 0x1a:
+					length = dataView.getUint32(position)
+					position += 4
+					break
+				default:
+					throw new Error('Expected array header, but got ' + src[position - 1])
+			}
 		}
-		readArrayHeader(l)
+		// This initial function is quick to instantiate, but runs slower. After several iterations pay the cost to build the faster function
+		if (this.objectLiteralSize === length) // we have a fast object literal reader, use it (assuming it is the right length)
+			return this.objectLiteral(read)
+		if (this.count++ == 3) { // create a fast reader
+			this.objectLiteralSize = length
+			this.objectLiteral = new Function('r', 'return {' + this.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
+			return this.objectLiteral(read)
+		}
 		let object = {}
-		for (let i = 0; i < l; i++) {
-			let key = structure[i]
+		for (let i = 0; i < length; i++) {
+			let key = this[i]
 			object[key] = read()
 		}
 		return object
 	}
-	readObject.count = 0
+	structure.count = 0
 	return readObject
-}
-
-function readArrayHeader(expectedLength) {
-	// consume the array header, TODO: check expected length
-	let token = src[position++]
-	//let majorType = token >> 5
-	token = token & 0x1f
-	if (token > 0x17) {
-		switch (token) {
-			case 0x18: position++
-				break
-			case 0x19: position += 2
-				break
-			case 0x1a: position += 4
-		}
-	}
 }
 
 let readFixedString = readStringJS
@@ -750,8 +759,8 @@ currentExtensions[3] = (buffer) => {
 
 // the registration of the record definition extension (tag 105)
 const recordDefinition = (definition) => {
-	let structure = definition[0]
-	let id = definition[1]
+	let id = definition[0] - 0xe000
+	let structure = definition[1]
 	currentStructures[id] = structure
 	structure.read = createStructureReader(structure)
 	let object = {}
@@ -761,7 +770,7 @@ const recordDefinition = (definition) => {
 	}
 	return object
 }
-currentExtensions[LEGACY_RECORD_TAG_ID] = recordDefinition
+currentExtensions[LEGACY_RECORD_INLINE_ID] = recordDefinition
 
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
@@ -860,7 +869,7 @@ currentExtensionRanges.push((tag, input) => {
 		return combine(input, packedTable.suffixes[tag - 27639])
 	if (tag >= 1811940352 && tag <= 1879048191)
 		return combine(input, packedTable.suffixes[tag - 1811939328])
-	if (token == SHARED_DATA_TAG_ID) {// we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+	if (tag == SHARED_DATA_TAG_ID) {// we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
 		return {
 			packed: packedTable,
 			structures: currentStructures

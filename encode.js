@@ -7,7 +7,7 @@ let extensions, extensionClasses
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
-const RECORD_DEFINITION_ID = 0x7264 // 'rd'
+const RECORD_INLINE_ID = 0xdfff // temporary first-come first-serve tag // proposed tag: 0x7265 // 're'
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
 let serializationId = 1
@@ -36,7 +36,7 @@ export class Encoder extends Decoder {
 			} : false
 
 		let encoder = this
-		let maxSharedStructures = 64
+		let maxSharedStructures = options.maxSharedStructures || 128
 		let isSequential = options.sequential
 		if (isSequential) {
 			maxSharedStructures = 0
@@ -576,8 +576,11 @@ export class Encoder extends Decoder {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = keys.length
+			//let parentRecordId
 			for (let i = 0; i < length; i++) {
 				let key = keys[i]
+				//if (!parentRecordId)
+				//	parentRecordId = transition[RECORD_SYMBOL]
 				nextTransition = transition[key]
 				if (!nextTransition) {
 					nextTransition = transition[key] = Object.create(null)
@@ -587,16 +590,9 @@ export class Encoder extends Decoder {
 			}
 			let recordId = transition[RECORD_SYMBOL]
 			if (recordId !== undefined) {
-				if (recordId < 0x18)
-					target[position++] = 0xc0 | recordId
-				else if (recordId < 0x100) {
-					target[position++] = 0xd8
-					target[position++] = recordId
-				} else {
-					target[position++] = 0xd9
-					target[position++] = recordId >> 8
-					target[position++] = recordId & 0xff
-				}
+				target[position++] = 0xd9
+				target[position++] = (recordId >> 8) | 0xe0
+				target[position++] = recordId & 0xff
 			} else {
 				recordId = structures.nextId++
 				if (!recordId) {
@@ -609,19 +605,12 @@ export class Encoder extends Decoder {
 				transition[RECORD_SYMBOL] = recordId
 				structures[recordId] = keys
 				if (sharedStructures && sharedStructures.length <= maxSharedStructures) {
-					if (recordId < 0x18)
-						target[position++] = 0xc0 | recordId
-					else if (recordId < 0x100) {
-						target[position++] = 0xd8
-						target[position++] = recordId
-					} else {
-						target[position++] = 0xd9
-						target[position++] = recordId >> 8
-						target[position++] = recordId & 0xff
-					}
+					target[position++] = 0xd9
+					target[position++] = (recordId >> 8) | 0xe0
+					target[position++] = recordId & 0xff
 					hasSharedUpdate = true
 				} else {
-					targetView.setUint32(position, 0xd9726400) // tag two byte, then record definition id
+					targetView.setUint32(position, 0xd9dfff00) // tag two byte, then record definition id
 					position += 3
 					if (newTransitions)
 						transitionsCount += serializationsSinceTransitionRebuild * newTransitions
@@ -630,8 +619,8 @@ export class Encoder extends Decoder {
 						recordIdsToRemove.shift()[RECORD_SYMBOL] = undefined // we are cycling back through, and have to remove old ones
 					recordIdsToRemove.push(transition)
 					writeArrayHeader(length + 2)
+					encode(0xe000 + recordId)
 					encode(keys)
-					encode(recordId)
 					// now write the values
 					for (let i =0; i < length; i++)
 						encode(object[keys[i]])
