@@ -287,7 +287,9 @@ export function read() {
 					if (!structure.read)
 						structure.read = createStructureReader(structure)
 					return structure.read()
-				} else if (currentDecoder.getStructures && token < 0x10000) {
+				} else if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+					return recordDefinition(read())
+				if (currentDecoder.getStructures && token < 0x10000) {
 					let updatedStructures = saveState(() => {
 						// save the state in case getStructures modifies our buffer
 						src = null
@@ -302,11 +304,8 @@ export function read() {
 						if (!structure.read)
 							structure.read = createStructureReader(structure)
 						return structure.read()
-					} else
-						return token
+					}
 				}
-				if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
-					return recordDefinition(read())
 			}
 			let extension = currentExtensions[token]
 			if (extension) {
