@@ -320,7 +320,7 @@ export function read() {
 					if (value !== undefined)
 						return value
 				}
-				return new Tag(input)
+				return new Tag(input, token)
 			}
 		case 7: // fixed value
 			switch (token) {
@@ -729,8 +729,9 @@ function readKey() {
 }
 
 export class Tag {
-	constructor(value) {
+	constructor(value, tag) {
 		this.value = value
+		this.tag = tag
 	}
 }
 
@@ -748,12 +749,25 @@ currentExtensions[1] = (epochSec) => {
 
 currentExtensions[2] = (buffer) => {
 	// bigint extension
-	return new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getBigUint64(0)
+	let value = BigInt(0)
+	for (let i = 0, l = buffer.byteLength; i < l; i++) {
+		value = BigInt(buffer[i]) + value << BigInt(8)
+	}
+	return value
 }
 
 currentExtensions[3] = (buffer) => {
 	// negative bigint extension
-	return BigInt(-1) - (new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getBigUint64(0))
+	return BigInt(-1) - currentExtensions[2](buffer)
+}
+currentExtensions[4] = (fraction) => {
+	// best to reparse to maintain accuracy
+	return +(fraction[1] + 'e' + fraction[0])
+}
+
+currentExtensions[5] = (fraction) => {
+	// probably not sufficiently accurate
+	return fraction[1] * Math.exp(fraction[0] * Math.log(2))
 }
 
 // the registration of the record definition extension (tag 105)

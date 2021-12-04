@@ -432,7 +432,7 @@ export class Encoder extends Decoder {
 							let extensionClass = extensionClasses[i]
 							if (value instanceof extensionClass) {
 								let extension = extensions[i]
-								let tag = extension.tag
+								let tag = extension.tag || extension.getTag(value)
 								if (tag < 0x18) {
 									target[position++] = 0xc0 | tag
 								} else if (tag < 0x100) {
@@ -665,10 +665,29 @@ export class Encoder extends Decoder {
 	}
 }
 
-function copyBinary(source, target, targetOffset, offset, endOffset) {
-	while (offset < endOffset) {
-		target[targetOffset++] = source[offset++]
+function writeSharedData() {
+	if (packedValues.values.length > 0) {
+		target[position++] = 0xd8 // one-byte tag
+		target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+		writeArrayHeader(4)
+		let valuesArray = packedValues.values
+		encode(valuesArray)
+		writeArrayHeader(0) // prefixes
+		writeArrayHeader(0) // suffixes
+		packedObjectMap = Object.create(sharedPackedObjectMap || null)
+		for (let i = 0, l = valuesArray.length; i < l; i++) {
+			packedObjectMap[valuesArray[i]] = i
+		}
 	}
+	if (sharedStructures) {
+		targetView.setUint32(position, 0xd9dffe00)
+		position += 3
+		let definitions = sharedStructures.slice(0)
+		definitions.unshift(0xe000)
+		definitions.push(new Tag(++sharedStructures.version, 0xdffd))
+		encode(definitions)
+	} else
+		encode(new Tag(++sharedStructures.version, 0xdffd))
 }
 
 function writeArrayHeader(length) {
@@ -738,7 +757,7 @@ function findRepetitiveStrings(value, packedValues) {
 	}
 }
 
-extensionClasses = [ Date, Set, Error, RegExp, ArrayBuffer, ByteArray,
+extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer, ByteArray,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
@@ -776,6 +795,13 @@ extensions = [{
 	tag: 27, // http://cbor.schmorp.de/generic-object
 	encode(regex, encode) {
 		encode([ 'RegExp', regex.source, regex.flags ])
+	}
+}, {
+	getTag(tag) {
+		return tag.tag
+	},
+	encode(tag, encode) {
+		encode(tag.value)
 	}
 }, {
 	encode(arrayBuffer, encode, makeRoom) {
