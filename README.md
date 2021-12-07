@@ -24,7 +24,7 @@ let data = decode(serializedAsBuffer);
 This `encode` function will generate standard CBOR without any extensions that should be compatible with any standard CBOR parser/decoder. It will serialize JavaScript objects as CBOR `map`s by default. The `decode` function will deserialize CBOR `map`s as an `Object` with the properties from the map. The cbor-x package runs on any modern JS platform, but does have additional optimizations for NodeJS usage (and will use a node addon for performance boost as an optional dependency).
 
 ## Deno Usage
-CBOR modules are standard ESM modules and is registered in the deno.land registry at https://deno.land/x/cbor. can be loaded directly from deno.land. The standard encode and decode functionality is available on Deno, like other platforms.
+Cbor-x modules are standard ESM modules and can be loaded directly from the [deno.land registry for cbor](https://deno.land/x/cbor) for use in Deno. The standard encode and decode functionality is available on Deno, like other platforms.
 
 ### Streams
 We can use the including streaming functionality (which further improves performance). The `EncoderStream` is a NodeJS transform stream that can be used to serialize objects to a binary stream (writing to network/socket, IPC, etc.), and the `DecoderStream` can be used to deserialize objects from a binary sream (reading from network/socket, etc.):
