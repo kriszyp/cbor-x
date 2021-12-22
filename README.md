@@ -274,7 +274,10 @@ Here is a list of CBOR tags that are supported for decoding:
 * 1 - Numeric Date
 * 2 - BigInt
 * 3 - Negative BigInt
+* 6 - Packed string reference
 * 27 - Generic named objects (used for Error, RegExp)
+* 28, 29 - Value sharing/object referencing
+* 51 - Packed table
 * 64 - Uint8Array
 * 68 - Uint8ClampedArray
 * 69 - Uint16Array
@@ -289,7 +292,7 @@ Here is a list of CBOR tags that are supported for decoding:
 * 105 - Records
 * 258 - Set
 * 259 - Map
-* 40009, 40010 - Pointers for cycles
+* 57344 - 57599 - Records
 
 ## Alternate Encoding/Package
 The high-performance serialization and deserialization algorithms in this package are also available in the [msgpackr](https://github.com/kriszyp/msgpackr) for the MessagePack format, with the same API and design. A quick summary of the pros and cons of using MessagePack vs CBOR are:
