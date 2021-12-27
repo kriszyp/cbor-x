@@ -102,9 +102,10 @@ suite('CBOR basic tests', function(){
 	})
 	test('encode/decode sample data with records', function(){
 		var data = sampleData
-		let structures = []
-		let encoder = new Encoder({ structures, useRecords: true })
+		let sharedSerialized
+		let encoder = new Encoder({ getStructures() { return }, saveStructures(shared) { sharedSerialized = encode(shared) }, useRecords: true })
 		var serialized = encoder.encode(data)
+		encoder = new Encoder({ getStructures() { return decode(sharedSerialized) }, saveStructures(shared) { sharedSerialized = encode(shared) }, useRecords: true })
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})

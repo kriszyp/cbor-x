@@ -289,12 +289,21 @@ export function read() {
 					return structure.read()
 				} else if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
 					return recordDefinition(read())
+				else if (token == RECORD_DEFINITIONS_ID) {
+					let length = readJustLength()
+					let id = read()
+					for (let i = 2; i < length; i++) {
+						recordDefinition([id++, read()])
+					}
+					return read()
+				}
 				if (currentDecoder.getStructures && token < 0x10000) {
-					let updatedStructures = saveState(() => {
+					let sharedData = saveState(() => {
 						// save the state in case getStructures modifies our buffer
 						src = null
 						return currentDecoder.getStructures()
 					})
+					let updatedStructures = sharedData.structures
 					if (currentStructures === true)
 						currentDecoder.structures = currentStructures = updatedStructures
 					else
@@ -868,7 +877,7 @@ function combine(a, b) {
 		return a.concat(b)
 	return Object.assign({}, a, b)
 }
-const SHARED_DATA_TAG_ID = 0x73687264 // ascii 'shrd'
+const SHARED_DATA_TAG_ID = 0x53687264 // ascii 'Shrd'
 currentExtensionRanges.push((tag, input) => {
 	if (tag >= 225 && tag <= 255)
 		return combine(packedValues.prefixes[tag - 224], input)
@@ -902,6 +911,27 @@ function registerTypedArray(typedArrayName, tag) {
 		// we have to always slice/copy here to get a new ArrayBuffer that is word/byte aligned
 		return new glbl[typedArrayName](Uint8Array.prototype.slice.call(buffer, 0).buffer)
 	}
+}
+
+function readJustLength() {
+	let token = src[position++] & 0x1f
+	token = token & 0x1f
+	if (token > 0x17) {
+		switch (token) {
+			case 0x18:
+				token = src[position++]
+				break
+			case 0x19:
+				token = dataView.getUint16(position)
+				position += 2
+				break
+			case 0x1a:
+				token = dataView.getUint32(position)
+				position += 4
+				break
+		}
+	}
+	return token
 }
 
 function saveState(callback) {

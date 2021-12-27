@@ -73,8 +73,11 @@ export class Encoder extends Decoder {
 			referenceMap = encoder.structuredClone ? new Map() : null
 			sharedStructures = encoder.structures
 			if (sharedStructures) {
-				if (sharedStructures.uninitialized)
-					encoder.structures = sharedStructures = encoder.getStructures()
+				if (sharedStructures.uninitialized) {
+					let sharedData = encoder.getStructures()
+					encoder.structures = sharedStructures = sharedData && sharedData.structures || []
+					encoder.sharedValues = sharedPackedObjectMap = sharedData && sharedData.sharedValues
+				}
 				let sharedStructuresLength = sharedStructures.length
 				if (sharedStructuresLength > maxSharedStructures && !isSequential)
 					sharedStructuresLength = maxSharedStructures
@@ -173,9 +176,11 @@ export class Encoder extends Decoder {
 							shared = shared.concat(sharedValues)
 						}
 
-						if (encoder.saveStructures(encoder.structures, lastSharedStructuresLength) === false) {
+						if (encoder.saveStructures(new SharedData(encoder.structures, sharedValues, encoder.sharedVersion), encoder.sharedVersion) === false) {
 							// get updated structures and try again if the update failed
-							encoder.structures = encoder.getStructures() || []
+							let sharedData = encoder.getStructures()
+							encoder.structures = sharedStructures = sharedData && sharedData.structures || []
+							encoder.sharedValues = sharedPackedObjectMap = sharedData && sharedData.sharedValues
 							return encoder.encode(value)
 						}
 						lastSharedStructuresLength = shared.length
@@ -664,30 +669,12 @@ export class Encoder extends Decoder {
 		position = 0
 	}
 }
-
-function writeSharedData() {
-	if (packedValues.values.length > 0) {
-		target[position++] = 0xd8 // one-byte tag
-		target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
-		writeArrayHeader(4)
-		let valuesArray = packedValues.values
-		encode(valuesArray)
-		writeArrayHeader(0) // prefixes
-		writeArrayHeader(0) // suffixes
-		packedObjectMap = Object.create(sharedPackedObjectMap || null)
-		for (let i = 0, l = valuesArray.length; i < l; i++) {
-			packedObjectMap[valuesArray[i]] = i
-		}
+class SharedData {
+	constructor(structures, values, version) {
+		this.structures = structures
+		this.values = values
+		this.version = version
 	}
-	if (sharedStructures) {
-		targetView.setUint32(position, 0xd9dffe00)
-		position += 3
-		let definitions = sharedStructures.slice(0)
-		definitions.unshift(0xe000)
-		definitions.push(new Tag(++sharedStructures.version, 0xdffd))
-		encode(definitions)
-	} else
-		encode(new Tag(++sharedStructures.version, 0xdffd))
 }
 
 function writeArrayHeader(length) {
@@ -761,7 +748,7 @@ extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer, ByteArray,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
-	Float32Array, Float64Array]
+	Float32Array, Float64Array, SharedData]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
 extensions = [{
@@ -821,7 +808,35 @@ extensions = [{
 	typedArrayEncoder(78),
 	typedArrayEncoder(79),
 	typedArrayEncoder(81),
-	typedArrayEncoder(82)]
+	typedArrayEncoder(82),
+{
+	encode(sharedData, encode) { // write SharedData
+		let packedValues = sharedData.values || []
+		let sharedStructures = sharedData.structures || []
+		if (packedValues.values.length > 0) {
+			target[position++] = 0xd8 // one-byte tag
+			target[position++] = 51 // tag 51 for packed shared structures https://www.potaroo.net/ietf/ids/draft-ietf-cbor-packed-03.txt
+			writeArrayHeader(4)
+			let valuesArray = packedValues.values
+			encode(valuesArray)
+			writeArrayHeader(0) // prefixes
+			writeArrayHeader(0) // suffixes
+			packedObjectMap = Object.create(sharedPackedObjectMap || null)
+			for (let i = 0, l = valuesArray.length; i < l; i++) {
+				packedObjectMap[valuesArray[i]] = i
+			}
+		}
+		if (sharedStructures) {
+			targetView.setUint32(position, 0xd9dffe00)
+			position += 3
+			let definitions = sharedStructures.slice(0)
+			definitions.unshift(0xe000)
+			definitions.push(new Tag(++sharedStructures.version, 0x53687264))
+			encode(definitions)
+		} else
+			encode(new Tag(++sharedData.version, 0xdffd))
+		}
+	}]
 
 function typedArrayEncoder(tag) {
 	return {
