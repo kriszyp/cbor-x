@@ -652,36 +652,6 @@ function shortStringInJS(length) {
 	}
 }
 
-function readOnlyJSString() {
-	let token = src[position++]
-	let length
-	if (token < 0xc0) {
-		// fixstr
-		length = token - 0xa0
-	} else {
-		switch(token) {
-			case 0xd9:
-			// str 8
-				length = src[position++]
-				break
-			case 0xda:
-			// str 16
-				length = dataView.getUint16(position)
-				position += 2
-				break
-			case 0xdb:
-			// str 32
-				length = dataView.getUint32(position)
-				position += 4
-				break
-			default:
-				throw new Error('Expected string')
-		}
-	}
-	return readStringJS(length)
-}
-
-
 function readBin(length) {
 	return currentDecoder.copyBuffers ?
 		// specifically use the copying slice (not the node one)
@@ -830,6 +800,16 @@ const recordDefinition = (definition) => {
 	return object
 }
 currentExtensions[LEGACY_RECORD_INLINE_ID] = recordDefinition
+currentExtensions[14] = (value) => {
+	if (bundledStrings)
+		return bundledStrings[0].slice(bundledStrings.position0, bundledStrings.position0 += value)
+	return new Tag(value, 14)
+}
+currentExtensions[15] = (value) => {
+	if (bundledStrings)
+		return bundledStrings[1].slice(bundledStrings.position1, bundledStrings.position1 += value)
+	return new Tag(value, 15)
+}
 
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
@@ -949,23 +929,27 @@ function registerTypedArray(typedArrayName, tag) {
 		return new glbl[typedArrayName](Uint8Array.prototype.slice.call(buffer, 0).buffer)
 	}
 }
-const TEMP_BUNDLE = []
-currentExtensions[0x62] = (data) => {
-	let dataSize = (data[0] << 24) + (data[1] << 16) + (data[2] << 8) + data[3]
+
+(currentExtensions[0xdff9] = (read) => {
+	let length = readJustLength()
+	let bundlePosition = position + read()
+	for (let i = 2; i < length; i++) {
+		// skip past bundles that were already read
+		let bundleLength = readJustLength() // this will increment position, so must add to position afterwards
+		position += bundleLength
+	}
 	let dataPosition = position
-	position += dataSize - data.length
-	bundledStrings = TEMP_BUNDLE
-	bundledStrings = [readOnlyJSString(), readOnlyJSString()]
+	position = bundlePosition
+	bundledStrings = [readStringJS(readJustLength()), readStringJS(readJustLength())]
 	bundledStrings.position0 = 0
 	bundledStrings.position1 = 0
 	bundledStrings.postBundlePosition = position
 	position = dataPosition
 	return read()
-}
+}).handlesRead = true
 
 function readJustLength() {
 	let token = src[position++] & 0x1f
-	token = token & 0x1f
 	if (token > 0x17) {
 		switch (token) {
 			case 0x18:

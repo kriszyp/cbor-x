@@ -157,6 +157,7 @@ suite('CBOR basic tests', function(){
 			var deserialized = encoder.decode(serialized)
 			assert.deepEqual(deserialized, data)
 		}
+	})
 	test('pack/unpack sample data with bundled strings', function(){
 		var data = sampleData
 		let encoder = new Encoder({ /*structures,*/ useRecords: false, bundleStrings: true })
@@ -390,14 +391,13 @@ suite('CBOR basic tests', function(){
 			mapsAsObjects: true,
 			useTimestamp32: true,
 			useTag259ForMaps: false,
-			onInvalidDate: () => 'Custom invalid date'
 		})
 		var serialized = encoder.encode(data)
 		var deserialized = encoder.decode(serialized)
 		assert.equal(deserialized.map[4], 'four')
 		assert.equal(deserialized.map.three, 3)
 		assert.equal(deserialized.date.getTime(), 1532219539000)
-		assert.equal(deserialized.invalidDate, 'Custom invalid date')
+		assert.isTrue(isNaN(deserialized.invalidDate.getTime()))
 	})
 	test('key caching', function() {
 		var data = {

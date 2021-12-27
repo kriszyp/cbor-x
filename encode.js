@@ -273,19 +273,16 @@ export class Encoder extends Decoder {
 						let maxBytes = (bundledStrings[0] ? bundledStrings[0].length * 3 + bundledStrings[1].length : 0) + 10
 						if (position + maxBytes > safeEnd)
 							target = makeRoom(position + maxBytes)
-						if (bundledStrings.position) { // here we use the 0x62 extension to write the last bundle and reserve sapce for the reference pointer to the next/current bundle
-							target[position] = 0xc8 // ext 16
-							position += 3 // reserve for the writing bundle size
-							target[position++] = 0x62 // 'b'
-							extStart = position - start
-							position += 4 // reserve for writing bundle reference
+						target[position++] = 0xd9 // tag 16-bit
+						target[position++] = 0xdf // tag 0xdff9
+						target[position++] = 0xf9
+						// TODO: If we only have one bundle with any string data, only write one string bundle
+						target[position++] = bundledStrings.position ? 0x84 : 0x82 // array of 4 or 2 elements depending on if we write bundles
+						target[position++] = 0x1a // 32-bit unsigned int
+						extStart = position - start
+						position += 4 // reserve for writing bundle reference
+						if (bundledStrings.position) {
 							writeBundles(start, encode) // write the last bundles
-							targetView.setUint16(extStart + start - 3, position - start - extStart)
-						} else { // here we use the 0x62 extension just to reserve the space for the reference pointer to the bundle (will be updated once the bundle is written)
-							target[position++] = 0xd6 // fixext 4
-							target[position++] = 0x62 // 'b'
-							extStart = position - start
-							position += 4 // reserve for writing bundle reference
 						}
 						bundledStrings = ['', ''] // create new ones
 						bundledStrings.size = 0
@@ -293,8 +290,8 @@ export class Encoder extends Decoder {
 					}
 					let twoByte = hasNonLatin.test(value)
 					bundledStrings[twoByte ? 0 : 1] += value
-					target[position++] = 0xc1
-					encode(twoByte ? -strLength : strLength);
+					target[position++] = twoByte ? 0xce : 0xcf
+					encode(strLength);
 					return
 				}
 				let headerSize
@@ -943,10 +940,9 @@ function insertIds(serialized, idsToInsert) {
 	return serialized
 }
 function writeBundles(start, encode) {
-	targetView.setUint32(bundledStrings.position + start, position - bundledStrings.position - start)
+	targetView.setUint32(bundledStrings.position + start, position - bundledStrings.position - start + 1) // the offset to bundle
 	let writeStrings = bundledStrings
 	bundledStrings = null
-	let startPosition = position
 	encode(writeStrings[0])
 	encode(writeStrings[1])
 }
