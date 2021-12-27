@@ -59,7 +59,7 @@
     "/*.ts"
   ],
   "optionalDependencies": {
-    "cbor-extract": "^0.3.2"
+    "cbor-extract": "^1.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-json": "^4.1.0",
