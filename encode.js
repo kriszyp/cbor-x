@@ -267,7 +267,7 @@ export class Encoder extends Decoder {
 					}
 				}
 				let strLength = value.length
-				if (bundledStrings && strLength >= 4 && strLength < 0x1000) {
+				if (bundledStrings && strLength >= 4 && strLength < 0x400) {
 					if ((bundledStrings.size += strLength) > MAX_BUNDLE_SIZE) {
 						let extStart
 						let maxBytes = (bundledStrings[0] ? bundledStrings[0].length * 3 + bundledStrings[1].length : 0) + 10

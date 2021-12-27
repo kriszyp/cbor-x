@@ -566,10 +566,10 @@ caniuse-lite@^1.0.30001254:
   resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001258.tgz#b604eed80cc54a578e4bf5a02ae3ed49f869d252"
   integrity sha512-RBByOG6xWXUp0CR2/WU2amXz3stjKpSl5J1xU49F1n2OxD//uBZO4wCKUiG+QMGf7CHGfDDcqoKriomoGVxTeA==
 
-cbor-extract@^0.3.2:
-  version "0.3.2"
-  resolved "https://registry.yarnpkg.com/cbor-extract/-/cbor-extract-0.3.2.tgz#03ac218a54f95327d887c4bfc70089d1c8970c53"
-  integrity sha512-euTSudP3MORNR9+DLDY6seMBZ5EA32CLdobmN5IjmU00zZDnim1zSZZAVrNubKfoBFhckDJFJXSx6zOLNbIYqw==
+cbor-extract@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/cbor-extract/-/cbor-extract-1.0.0.tgz#e6c793adc166d7661a0a59b8bf5433b98e202ab9"
+  integrity sha512-2y71EsPT4dJjtS24JIZfzUodm7kNrJJouIL7U4YiO1bl5QJyCHz9j810x/d+A/L+1BWQCE0771TiBrVmDL0MOA==
   dependencies:
     nan "^2.14.2"
     node-gyp-build "^4.2.3"

@@ -583,7 +583,7 @@ suite('CBOR performance tests', function(){
 		let structures = []
 		var serialized = encode(data)
 		console.log('CBOR size', serialized.length)
-		let encoder = new Encoder({ structures })
+		let encoder = new Encoder({ structures, bundleStrings: true })
 		var serialized = encoder.encode(data)
 		console.log('CBOR w/ record ext size', serialized.length)
 		for (var i = 0; i < ITERATIONS; i++) {
@@ -594,7 +594,7 @@ suite('CBOR performance tests', function(){
 		var data = sampleData
 		this.timeout(10000)
 		let structures = []
-		let encoder = new Encoder({ structures })
+		let encoder = new Encoder({ structures, bundleStrings: true })
 		let buffer = typeof Buffer != 'undefined' ? Buffer.alloc(0x10000) : new Uint8Array(0x10000)
 
 		for (var i = 0; i < ITERATIONS; i++) {

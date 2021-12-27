@@ -10,6 +10,7 @@ const EMPTY_ARRAY = []
 const LEGACY_RECORD_INLINE_ID = 105
 const RECORD_DEFINITIONS_ID = 0xdffe
 const RECORD_INLINE_ID = 0xdfff // temporary first-come first-serve tag // proposed tag: 0x7265 // 're'
+const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
@@ -285,39 +286,44 @@ export function read() {
 				return map
 			}
 		case 6: // extension
-			if (token >= RECORD_DEFINITIONS_ID) {
+			if (token >= BUNDLED_STRINGS_ID) {
 				let structure = currentStructures[token & 0x1fff] // check record structures first
 				// At some point we may provide an option for dynamic tag assignment with a range like token >= 8 && (token < 16 || (token > 0x80 && token < 0xc0) || (token > 0x130 && token < 0x4000))
 				if (structure) {
 					if (!structure.read)
 						structure.read = createStructureReader(structure)
 					return structure.read()
-				} else if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
-					return recordDefinition(read())
-				else if (token == RECORD_DEFINITIONS_ID) {
-					let length = readJustLength()
-					let id = read()
-					for (let i = 2; i < length; i++) {
-						recordDefinition([id++, read()])
-					}
-					return read()
 				}
-				if (currentDecoder.getStructures && token < 0x10000) {
-					let sharedData = saveState(() => {
-						// save the state in case getStructures modifies our buffer
-						src = null
-						return currentDecoder.getStructures()
-					})
-					let updatedStructures = sharedData.structures
-					if (currentStructures === true)
-						currentDecoder.structures = currentStructures = updatedStructures
-					else
-						currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
-					structure = currentStructures[token & 0x1fff]
-					if (structure) {
-						if (!structure.read)
-							structure.read = createStructureReader(structure)
-						return structure.read()
+				if (token < 0x10000) {
+					if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+						return recordDefinition(read())
+					else if (token == RECORD_DEFINITIONS_ID) {
+						let length = readJustLength()
+						let id = read()
+						for (let i = 2; i < length; i++) {
+							recordDefinition([id++, read()])
+						}
+						return read()
+					} else if (token == BUNDLED_STRINGS_ID) {
+						return readBundleExt()
+					}
+					if (currentDecoder.getStructures) {
+						let sharedData = saveState(() => {
+							// save the state in case getStructures modifies our buffer
+							src = null
+							return currentDecoder.getStructures()
+						})
+						let updatedStructures = sharedData.structures
+						if (currentStructures === true)
+							currentDecoder.structures = currentStructures = updatedStructures
+						else
+							currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
+						structure = currentStructures[token & 0x1fff]
+						if (structure) {
+							if (!structure.read)
+								structure.read = createStructureReader(structure)
+							return structure.read()
+						}
 					}
 				}
 			}
@@ -930,7 +936,7 @@ function registerTypedArray(typedArrayName, tag) {
 	}
 }
 
-(currentExtensions[0xdff9] = (read) => {
+function readBundleExt() {
 	let length = readJustLength()
 	let bundlePosition = position + read()
 	for (let i = 2; i < length; i++) {
@@ -946,7 +952,7 @@ function registerTypedArray(typedArrayName, tag) {
 	bundledStrings.postBundlePosition = position
 	position = dataPosition
 	return read()
-}).handlesRead = true
+}
 
 function readJustLength() {
 	let token = src[position++] & 0x1f
