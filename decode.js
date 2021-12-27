@@ -20,6 +20,7 @@ let currentStructures
 let srcString
 let srcStringStart = 0
 let srcStringEnd = 0
+let bundledStrings
 let referenceMap
 let currentExtensions = []
 let currentExtensionRanges = []
@@ -56,6 +57,7 @@ export class Decoder {
 		srcStringEnd = 0
 		srcString = null
 		strings = EMPTY_ARRAY
+		bundledStrings = null
 		src = source
 		// this provides cached access to the data view for a buffer if it is getting reused, which is a recommend
 		// technique for getting data from a database where it can be copied into an existing buffer instead of creating
@@ -129,6 +131,9 @@ export function getPosition() {
 export function checkedRead() {
 	try {
 		let result = read()
+		if (bundledStrings) // bundled strings to skip past
+			position = bundledStrings.postBundlePosition
+
 		if (position == srcEnd) {
 			// finished reading this source, cleanup references
 			currentStructures = null
@@ -412,6 +417,8 @@ export function setExtractor(extractStrings) {
 		return function readString(length) {
 			let string = strings[stringPosition++]
 			if (string == null) {
+				if (bundledStrings)
+					return readStringJS(length)
 				let extraction = extractStrings(position, srcEnd, length, src)
 				if (typeof extraction == 'string') {
 					string = extraction
@@ -644,6 +651,36 @@ function shortStringInJS(length) {
 		}
 	}
 }
+
+function readOnlyJSString() {
+	let token = src[position++]
+	let length
+	if (token < 0xc0) {
+		// fixstr
+		length = token - 0xa0
+	} else {
+		switch(token) {
+			case 0xd9:
+			// str 8
+				length = src[position++]
+				break
+			case 0xda:
+			// str 16
+				length = dataView.getUint16(position)
+				position += 2
+				break
+			case 0xdb:
+			// str 32
+				length = dataView.getUint32(position)
+				position += 4
+				break
+			default:
+				throw new Error('Expected string')
+		}
+	}
+	return readStringJS(length)
+}
+
 
 function readBin(length) {
 	return currentDecoder.copyBuffers ?
@@ -912,6 +949,19 @@ function registerTypedArray(typedArrayName, tag) {
 		return new glbl[typedArrayName](Uint8Array.prototype.slice.call(buffer, 0).buffer)
 	}
 }
+const TEMP_BUNDLE = []
+currentExtensions[0x62] = (data) => {
+	let dataSize = (data[0] << 24) + (data[1] << 16) + (data[2] << 8) + data[3]
+	let dataPosition = position
+	position += dataSize - data.length
+	bundledStrings = TEMP_BUNDLE
+	bundledStrings = [readOnlyJSString(), readOnlyJSString()]
+	bundledStrings.position0 = 0
+	bundledStrings.position1 = 0
+	bundledStrings.postBundlePosition = position
+	position = dataPosition
+	return read()
+}
 
 function readJustLength() {
 	let token = src[position++] & 0x1f
@@ -943,6 +993,8 @@ function saveState(callback) {
 	let savedSrcString = srcString
 	let savedStrings = strings
 	let savedReferenceMap = referenceMap
+	let savedBundledStrings = bundledStrings
+
 	// TODO: We may need to revisit this if we do more external calls to user code (since it could be slow)
 	let savedSrc = new Uint8Array(src.slice(0, srcEnd)) // we copy the data in case it changes while external data is processed
 	let savedStructures = currentStructures
@@ -957,6 +1009,7 @@ function saveState(callback) {
 	srcString = savedSrcString
 	strings = savedStrings
 	referenceMap = savedReferenceMap
+	bundledStrings = savedBundledStrings
 	src = savedSrc
 	sequentialMode = savedSequentialMode
 	currentStructures = savedStructures

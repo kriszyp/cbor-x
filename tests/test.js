@@ -157,6 +157,12 @@ suite('CBOR basic tests', function(){
 			var deserialized = encoder.decode(serialized)
 			assert.deepEqual(deserialized, data)
 		}
+	test('pack/unpack sample data with bundled strings', function(){
+		var data = sampleData
+		let encoder = new Encoder({ /*structures,*/ useRecords: false, bundleStrings: true })
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
 	})
 	if (typeof Buffer != 'undefined')
 	test('replace data', function(){
@@ -359,6 +365,7 @@ suite('CBOR basic tests', function(){
 			date: new Date(1532219539733),
 			farFutureDate: new Date(3532219539133),
 			ancient: new Date(-3532219539133),
+			invalidDate: new Date('invalid')
 		}
 		let encoder = new Encoder()
 		var serialized = encoder.encode(data)
@@ -368,6 +375,7 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.date.getTime(), 1532219539733)
 		assert.equal(deserialized.farFutureDate.getTime(), 3532219539133)
 		assert.equal(deserialized.ancient.getTime(), -3532219539133)
+		assert.equal(deserialized.invalidDate.toString(), 'Invalid Date')
 	})
 	test('map/date with options', function(){
 		var map = new Map()
@@ -376,17 +384,20 @@ suite('CBOR basic tests', function(){
 		var data = {
 			map: map,
 			date: new Date(1532219539011),
+			invalidDate: new Date('invalid')
 		}
 		let encoder = new Encoder({
 			mapsAsObjects: true,
 			useTimestamp32: true,
 			useTag259ForMaps: false,
+			onInvalidDate: () => 'Custom invalid date'
 		})
 		var serialized = encoder.encode(data)
 		var deserialized = encoder.decode(serialized)
 		assert.equal(deserialized.map[4], 'four')
 		assert.equal(deserialized.map.three, 3)
 		assert.equal(deserialized.date.getTime(), 1532219539000)
+		assert.equal(deserialized.invalidDate, 'Custom invalid date')
 	})
 	test('key caching', function() {
 		var data = {

@@ -8,6 +8,8 @@
 [![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
 The cbor-x package is an extremely fast and conformant CBOR NodeJS/JavaScript implementation. Currently, it is over 3-10x faster than any another CBOR JS implementation (including cbor-js and cborg) and faster than most MessagePack encoders, Avro, and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), [RFC-8746](https://tools.ietf.org/html/rfc8746), [RFC-8742](https://datatracker.ietf.org/doc/html/rfc8742), [Packed CBOR](https://www.ietf.org/id/draft-ietf-cbor-packed-03.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x),  and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
+<img align="right" src="./assets/performance.png" width="380"/>
+
 
 ## Basic Usage
 Install on NodeJS with:
@@ -49,6 +51,9 @@ receivingStream.on('data', (data) => {
 });
 ```
 The `EncoderStream` and `DecoderStream` instances  will have also the record structure extension enabled by default (see below).
+
+## Deno Usage
+Cbor-x modules are standard ESM modules and can be loaded directly from the [deno.land registry for cbor](https://deno.land/x/cbor) for use in Deno. The standard pack/encode and unpack/decode functionality is available on Deno, like other platforms.
 
 ## Browser Usage
 Cbor-x  works as standalone JavaScript as well, and runs on modern browsers. It includes a bundled script, at `dist/index.js` for ease of direct loading:
@@ -151,11 +156,13 @@ The following options properties can be provided to the Encoder or Decoder const
 * `pack` - This will enable [CBOR packing](https://datatracker.ietf.org/doc/html/draft-ietf-cbor-packed) for encoding, as described above.
 * `variableMapSize` - This will use varying map size definition (from single-byte to full 32-bit representation) based on the number of keys when encoding objects, which yields slightly more compact encodings (for small objects), but is typically 5-10% slower during encoding. This is only relevant when record extension is disabled.
 * `copyBuffers` - When decoding a CBOR message with binary data (Buffers are encoded as binary data), copy the buffer rather than providing a slice/view of the buffer. If you want your input data to be collected or modified while the decoded embedded buffer continues to live on, you can use this option (there is extra overhead to copying).
+* `bundleStrings` - If `true` this uses a custom extension that bundles strings together, so that they can be decoded more quickly on browsers and Deno that do not have access to the NodeJS addon. This a custom extension, so both encoder and decoder need to support this. This can yield significant decoding performance increases on browsers (30%-50%).
 * `useTimestamp32` - Encode JS `Date`s in 32-bit format when possible by dropping the milliseconds. This is a more efficient encoding of dates. You can also cause dates to use 32-bit format by manually setting the milliseconds to zero (`date.setMilliseconds(0)`).
 * `sequential` - Encode structures in serialized data, and reference previously encoded structures with expectation that decoder will read the encoded structures in the same order as encoded, with `unpackMultiple`.
 * `largeBigIntToFloat` - If a bigint needs to be encoded that is larger than will fit in 64-bit integers, it will be encoded as a float-64 (otherwise will throw a RangeError).
 * `useTag259ForMaps` - This flag indicates if [tag 259 (explicit maps)](https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec--explicit-maps.md) should be used to encode JS `Map`s. When using records is enabled, this is disabled by default, since plain objects are encoded with record structures and unambigiously differentiated from `Map`s, which are encoded as CBOR maps. Without using records, this enabled by default and is necessary to distinguish plain objects from `Map`s (but can be disabled by setting this to `false`).
 * `int64AsNumber` - This will decode uint64 and int64 numbers as standard JS numbers rather than as bigint numbers.
+* `onInvalidDate` - This can be provided as function that will be called when an invalid date is provided. The function can throw an error, or return a value that will be encoded in place of the invalid date. If not provided, an invalid date will be encoded as an invalid timestamp (which decodes with msgpackr back to an invalid date).
 
 ### 32-bit Float Options
 By default all non-integer numbers are serialized as 64-bit float (double). This is fast, and ensures maximum precision. However, often real-world data doesn't not need 64-bits of precision, and using 32-bit encoding can be much more space efficient. There are several options that provide more efficient encodings. Using the decimal rounding options for encoding and decoding provides lossless storage of common decimal representations like 7.99, in more efficient 32-bit format (rather than 64-bit). The `useFloat32` property has several possible options, available from the module as constants:

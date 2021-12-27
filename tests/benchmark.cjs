@@ -68,7 +68,6 @@ debugger
 //  buf = bench('require("cbor-x").encode(obj) and compress;', (data) => deflateSync(cborX.encode(data)), data);
   //console.log('size', buf.length)
   buf = bench('require("cbor-x").encode(obj);', cborX.encode, data);
-//    buf = bench('require("msgpack").serialize(obj);', data => {let result = packr.serialize(data); packr.resetMemory(); return result;}, data);
 
   obj = bench('require("cbor-x").decode(buf);', cborX.decode, buf);
   test(obj);
