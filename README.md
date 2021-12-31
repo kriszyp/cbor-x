@@ -18,7 +18,7 @@ Install on NodeJS with:
 npm i cbor-x
 ```
 And `import` or `require` it for basic standard serialization/encoding (`encode`) and deserialization/decoding (`decode`) functions:
-```
+```JavaScript
 import { decode, encode } from 'cbor-x';
 let serializedAsBuffer = encode(value);
 let data = decode(serializedAsBuffer);
@@ -31,14 +31,14 @@ Cbor-x modules are standard ESM modules and can be loaded directly from the [den
 ### Streams
 We can use the including streaming functionality (which further improves performance). The `EncoderStream` is a NodeJS transform stream that can be used to serialize objects to a binary stream (writing to network/socket, IPC, etc.), and the `DecoderStream` can be used to deserialize objects from a binary sream (reading from network/socket, etc.):
 
-```
+```JavaScript
 import { EncoderStream } from 'cbor-x';
 let stream = new EncoderStream();
 stream.write(myData);
 
 ```
 Or for a full example of sending and receiving data on a stream:
-```
+```JavaScript
 import { EncoderStream } from 'cbor-x';
 let sendingStream = new EncoderStream();
 let receivingStream = new DecoderStream();
@@ -57,20 +57,20 @@ Cbor-x modules are standard ESM modules and can be loaded directly from the [den
 
 ## Browser Usage
 Cbor-x  works as standalone JavaScript as well, and runs on modern browsers. It includes a bundled script, at `dist/index.js` for ease of direct loading:
-```
+```HTML
 <script src="node_modules/cbor-x/dist/index.js"></script>
 ```
 
 This is UMD based, and will register as a module if possible, or create a `CBOR` global with all the exported functions.
 
 For module-based development, it is recommended that you directly import the module of interest, to minimize dependencies that get pulled into your application:
-```
+```JavaScript
 import { decode } from 'cbor-x/decode' // if you only need to decode
 ```
 
 ## Structured Cloning
 You can also use cbor-x for [structured cloning](https://html.spec.whatwg.org/multipage/structured-data.html). By enabling the `structuredClone` option, you can include references to other objects or cyclic references, and object identity will be preserved. Structured cloning also enables preserving certain typed objects like `Error`, `Set`, `RegExp` and TypedArray instances, using [registered CBOR tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml). For example:
-```
+```JavaScript
 let obj = {
 	set: new Set(['a', 'b']),
 	regular: /a\spattern/
@@ -88,7 +88,7 @@ This option is disabled by default because reference checking degrades performan
 
 ## Record / Object Structures
 There is a critical difference between maps (or dictionaries) that hold an arbitrary set of keys and values (JavaScript `Map` is designed for these), and records or object structures that have a well-defined set of fields. Typical JS objects/records may have many instances re(use) the same structure. By using the record extension, this distinction is preserved in CBOR and the encoding can reuse structures and not only provides better type preservation, but yield much more compact encodings and increase decoding performance by 2-3x. Cbor-x automatically generates record definitions that are reused and referenced by objects with the same structure. Records use CBOR's tags to align well CBOR's tag/extension mechanism. There are a number of ways to use this to our advantage. For large object structures with repeating nested objects with similar structures, simply serializing with the record extension can yield significant benefits. To use the record structures extension, we create a new `Encoder` instance. By default a new `Encoder` instance will have the record extension enabled:
-```
+```JavaScript
 import { Encoder } from 'cbor-x';
 let encoder = new Encoder();
 encoder.encode(myBigData);
@@ -103,14 +103,14 @@ Streaming with record structures works by encoding a structure the first time it
 ### Shared Record Structures
 Another useful way of using cbor-x, and the record extension, is for storing data in a databases, files, or other storage systems. If a number of objects with common data structures are being stored, a shared structure can be used to greatly improve data storage and deserialization efficiency. In the simplest form, provide a `structures` array, which is updated if any new object structure is encountered:
 
-```
+```JavaScript
 import { Encoder } from 'cbor-x';
 let encoder = new Encoder({
 	structures: [... structures that were last generated ...]
 });
 ```
 If you are working with persisted data, you will need to persist the `structures` data when it is updated. Cbor-x provides an API for loading and saving the `structures` on demand (which is robust and can be used in multiple-process situations where other processes may be updating this same `structures` array), we just need to provide a way to store the generated shared structure so it is available to deserialize stored data in the future:
-```
+```JavaScript
 import { Encoder } from 'cbor-x';
 let encoder = new Encoder({
 	getStructures() {
@@ -165,7 +165,7 @@ The following options properties can be provided to the Encoder or Decoder const
 
 ### 32-bit Float Options
 By default all non-integer numbers are serialized as 64-bit float (double). This is fast, and ensures maximum precision. However, often real-world data doesn't not need 64-bits of precision, and using 32-bit encoding can be much more space efficient. There are several options that provide more efficient encodings. Using the decimal rounding options for encoding and decoding provides lossless storage of common decimal representations like 7.99, in more efficient 32-bit format (rather than 64-bit). The `useFloat32` property has several possible options, available from the module as constants:
-```
+```JavaScript
 import { ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } from 'cbor-x'
 ```
 
@@ -230,7 +230,7 @@ See the [benchmark.md](benchmark.md) for more benchmarks and information about b
 
 ## Custom Extensions
 You can add your own custom extensions, which can be used to encode specific types/classes in certain ways. This is done by using the `addExtension` function, and specifying the class, extension type code (custom extensions should be a number greater than 40500, all others are reserved for  CBOR or cbor-x), and your encode and decode functions (or just the one you need). You can use cbor-x encoding and decoding within your extensions:
-```
+```JavaScript
 import { addExtension, Encoder } from 'cbor-x';
 
 class MyCustomClass {...}
