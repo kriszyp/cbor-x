@@ -49,19 +49,25 @@ suite('CBOR basic tests', function(){
 
 	test('encode/decode with keyMaps (basic)', function() {
 		var data = senmlData
-		let encoder = new Encoder({ useRecords: false, keyMap: senmlKeys })
-	  var serialized = encoder.encode(data)
-		var deserialized = encoder.decode(serialized)
+		let cborSenml = new Encoder({ useRecords: false, keyMap: senmlKeys })
+		let cborBasic = new Encoder()
+	  var serialized = cborSenml.encode(data)
+		var deserialized = cborSenml.decode(serialized)
 		console.log('KeyMap (no records) Size:', serialized.length)
+		console.log('Basic Size:', cborBasic.encode(data).length)
+		assert(serialized.length < cborBasic.encode(data).length)
 		assert.deepEqual(deserialized, data)
 	})
 	
 	test('encode/decode with keyMaps and Records)', function() {
 		var data = senmlData
-		let encoder = new Encoder({ useRecords: true, keyMap: senmlKeys })
-	  var serialized = encoder.encode(data)
-		var deserialized = encoder.decode(serialized)
-		console.log('KeyMap (no records) Size:', serialized.length, deserialized)
+		let cborSenml = new Encoder({ useRecords: true, keyMap: senmlKeys })
+		let cborBasic = new Encoder()
+	  var serialized = cborSenml.encode(data)
+		var deserialized = cborSenml.decode(serialized)
+		console.log('KeyMap (no records) Size:', serialized.length)
+		console.log('Basic Size:', cborBasic.encode(data).length)
+		assert(serialized.length < cborBasic.encode(data).length)
 		assert.deepEqual(deserialized, data)
 	})
 
