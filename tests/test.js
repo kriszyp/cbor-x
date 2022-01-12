@@ -1,6 +1,19 @@
 import * as CBOR from '../index.js'
 import chai from 'chai'
 import sampleData from './example4.json'
+
+const senmlData = [ 
+	{ bn: '/3303/0/5700', bt: 1278887, v: 35.5 },
+	{ t: 10, v: 34 },
+	{ t: 20, v: 33 },
+	{ t: 30, v: 32 },
+	{ t: 40, v: 31 },
+	{ t: 50, v: 30 } 
+]
+
+const senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, n: 0, u: 1, v: 2, vs: 3, t: 6, ut: 7, vd: 8 }
+
+
 //import inspector from 'inspector'; inspector.open(9229, null, true); debugger
 function tryRequire(module) {
 	try {
@@ -33,6 +46,25 @@ try {
 var ITERATIONS = 4000
 
 suite('CBOR basic tests', function(){
+
+	test('encode/decode with keyMaps (basic)', function() {
+		var data = senmlData
+		let encoder = new Encoder({ useRecords: false, keyMap: senmlKeys })
+	  var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		console.log('KeyMap (no records) Size:', serialized.length)
+		assert.deepEqual(deserialized, data)
+	})
+	
+	test('encode/decode with keyMaps and Records)', function() {
+		var data = senmlData
+		let encoder = new Encoder({ useRecords: true, keyMap: senmlKeys })
+	  var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		console.log('KeyMap (no records) Size:', serialized.length, deserialized)
+		assert.deepEqual(deserialized, data)
+	})
+
 	test('encode/decode data', function(){
 		var data = {
 			data: [

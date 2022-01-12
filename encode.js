@@ -56,7 +56,7 @@ export class Encoder extends Decoder {
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
-
+		
 		this.encode = function(value, encodeOptions) {
 			if (!target) {
 				target = new ByteArrayAllocate(8192)
@@ -95,6 +95,7 @@ export class Encoder extends Decoder {
 					sharedStructures.transitions = Object.create(null)
 					for (let i = 0; i < sharedStructuresLength; i++) {
 						let keys = sharedStructures[i]
+						//console.log('shared struct keys:', keys)
 						if (!keys)
 							continue
 						let nextTransition, transition = sharedStructures.transitions
@@ -470,10 +471,11 @@ export class Encoder extends Decoder {
 							position += 4
 						}
 						for (let [ key, entryValue ] of value) {
+							//encode(encodeKey(key))
 							encode(key)
 							encode(entryValue)
 						}
-					} else {	
+					} else {
 						for (let i = 0, l = extensions.length; i < l; i++) {
 							let extensionClass = extensionClasses[i]
 							if (value instanceof extensionClass) {
@@ -557,7 +559,7 @@ export class Encoder extends Decoder {
 			}
 			let key
 			for (let i = 0; i < length; i++) {
-				encode(key = keys[i])
+				encode(key = encoder.keyMap ? encodeKey(keys[i]) : keys[i])
 				encode(object[key])
 			}
 		} :
@@ -568,7 +570,7 @@ export class Encoder extends Decoder {
 			let size = 0
 			for (let key in object) {
 				if (safePrototype || object.hasOwnProperty(key)) {
-					encode(key)
+					encode(encoder.keyMap ? encoder.encodeKey(key) : key)
 					encode(object[key])
 					size++
 				}
@@ -619,13 +621,14 @@ export class Encoder extends Decoder {
 		}*/
 		(object) => {
 			let keys = Object.keys(object)
+			if (this.keyMap) keys = keys.map(k => this.encodeKey(k))
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = keys.length
 			//let parentRecordId
 			for (let i = 0; i < length; i++) {
-				let key = keys[i]
 				//if (!parentRecordId)
+				let key = keys[i]
 				//	parentRecordId = transition[RECORD_SYMBOL]
 				nextTransition = transition[key]
 				if (!nextTransition) {
@@ -667,9 +670,7 @@ export class Encoder extends Decoder {
 					writeArrayHeader(length + 2)
 					encode(0xe000 + recordId)
 					encode(keys)
-					// now write the values
-					for (let i =0; i < length; i++)
-						encode(object[keys[i]])
+					for (let v of Object.values(object)) encode(v)
 					return
 				}
 			}
@@ -678,8 +679,7 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
-			for (let i =0; i < length; i++)
-				encode(object[keys[i]])
+			for (let i =0; i < length; i++) encode(Object.values(object)[i])
 		}
 		const makeRoom = (end) => {
 			let newSize

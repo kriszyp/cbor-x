@@ -37,6 +37,7 @@ let sequentialMode = false
 export class Decoder {
 	constructor(options) {
 		if (options) {
+			if (options.keyMap && !options.useRecords) options.useRecords = false
 			if (options.useRecords === false && options.mapsAsObjects === undefined)
 				options.mapsAsObjects = true
 			if (options.getStructures && !options.structures)
@@ -44,6 +45,17 @@ export class Decoder {
 		}
 		Object.assign(this, options)
 	}
+	
+	decodeKey(key) {
+		return this.keyMap
+			? Object.keys(this.keyMap)[Object.values(this.keyMap).indexOf(key)] || key
+			: key
+	}
+
+	encodeKey(key) {
+		return this.keyMap && this.keyMap.hasOwnProperty(key) ? this.keyMap[key] : key
+	}
+
 	decode(source, end) {
 		if (src) {
 			// re-entrant execution, save the state and restore it after we do this decode
@@ -221,8 +233,8 @@ export function read() {
 						let key
 						if (currentDecoder.mapsAsObjects) {
 							let object = {}
-							while ((key = read()) != STOP_CODE)
-								object[key] = read()
+							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) object[currentDecoder.decodeKey(key)] = read()
+							else while ((key = read()) != STOP_CODE) object[key] = read()
 							return object
 						} else {
 							if (restoreMapsAsObject) {
@@ -230,8 +242,8 @@ export function read() {
 								restoreMapsAsObject = false
 							}
 							let map = new Map()
-							while ((key = read()) != STOP_CODE)
-								map.set(key, read())
+							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) map.set(currentDecoder.decodeKey(key), read())
+							else while ((key = read()) != STOP_CODE) map.set(key, read())
 							return map
 						}
 					case 7:
@@ -263,16 +275,15 @@ export function read() {
 			return readFixedString(token)
 		case 4: // array
 			let array = new Array(token)
-			for (let i = 0; i < token; i++) {
-				array[i] = read()
-			}
+		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
+			//else 
+			for (let i = 0; i < token; i++) array[i] = read()
 			return array
 		case 5: // map
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
-				for (let i = 0; i < token; i++) {
-					object[read()] = read()
-				}
+				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[currentDecoder.decodeKey(read())] = read()
+				else for (let i = 0; i < token; i++) object[read()] = read()
 				return object
 			} else {
 				if (restoreMapsAsObject) {
@@ -280,9 +291,8 @@ export function read() {
 					restoreMapsAsObject = false
 				}
 				let map = new Map()
-				for (let i = 0; i < token; i++) {
-					map.set(read(), read())
-				}
+				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) map.set(currentDecoder.decodeKey(read()),read())
+				else for (let i = 0; i < token; i++) map.set(read(), read())
 				return map
 			}
 		case 6: // extension
@@ -290,8 +300,7 @@ export function read() {
 				let structure = currentStructures[token & 0x1fff] // check record structures first
 				// At some point we may provide an option for dynamic tag assignment with a range like token >= 8 && (token < 16 || (token > 0x80 && token < 0xc0) || (token > 0x130 && token < 0x4000))
 				if (structure) {
-					if (!structure.read)
-						structure.read = createStructureReader(structure)
+					if (!structure.read) structure.read = createStructureReader(structure)
 					return structure.read()
 				}
 				if (token < 0x10000) {
@@ -393,14 +402,14 @@ function createStructureReader(structure) {
 			return this.objectLiteral(read)
 		if (this.count++ == 3) { // create a fast reader
 			this.objectLiteralSize = length
-			this.objectLiteral = new Function('r', 'return {' + this.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
+			this.objectLiteral = currentDecoder.keyMap 
+				? new Function('r', 'return {' + this.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) ? k + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
+				: new Function('r', 'return {' + this.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
 			return this.objectLiteral(read)
 		}
 		let object = {}
-		for (let i = 0; i < length; i++) {
-			let key = this[i]
-			object[key] = read()
-		}
+		if (currentDecoder.keyMap) for (let i = 0; i < length; i++) object[currentDecoder.decodeKey(this[i])] = read()
+		else for (let i = 0; i < length; i++) object[this[i]] = read()
 		return object
 	}
 	structure.count = 0
@@ -799,10 +808,14 @@ const recordDefinition = (definition) => {
 	currentStructures[id] = structure
 	structure.read = createStructureReader(structure)
 	let object = {}
-	for (let i = 2,l = definition.length; i < l; i++) {
-		let key = structure[i - 2]
-		object[key] = definition[i]
-	}
+	if (currentDecoder.keyMap) for (let i = 2,l = definition.length; i < l; i++) {
+			let key = currentDecoder.decodeKey(structure[i - 2])
+			object[key] = definition[i]
+		}
+	else for (let i = 2,l = definition.length; i < l; i++) {
+			let key = structure[i - 2]
+			object[key] = definition[i]
+		}
 	return object
 }
 currentExtensions[LEGACY_RECORD_INLINE_ID] = recordDefinition

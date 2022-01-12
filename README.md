@@ -7,6 +7,9 @@
 [![module](https://img.shields.io/badge/module-ESM%2FCJS-blue)](README.md)
 [![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
+
+NOW WITH ADDED SENML via keyMaps (see tests)
+
 The cbor-x package is an extremely fast and conformant CBOR NodeJS/JavaScript implementation. Currently, it is over 3-10x faster than any other CBOR JS implementation (including cbor-js and cborg) and faster than most MessagePack encoders, Avro, and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), [RFC-8746](https://tools.ietf.org/html/rfc8746), [RFC-8742](https://datatracker.ietf.org/doc/html/rfc8742), [Packed CBOR](https://www.ietf.org/id/draft-ietf-cbor-packed-03.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x),  and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
 <img align="right" src="./assets/performance.png" width="380"/>
 
