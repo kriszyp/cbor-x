@@ -144,7 +144,7 @@ decodeMultiple(data, (value) => {
 KeyMaps can be used to remap properties of source Objects and Maps to numerical equivalents for more efficient encoding. 
 The principle driver for this feature is to support `application/senml+cbor`content-encoding as defined in https://datatracker.ietf.org/doc/html/rfc8428#section-6 for use in LWM2M application (see http://www.openmobilealliance.org/release/LightweightM2M/V1_2-20201110-A/HTML-Version/OMA-TS-LightweightM2M_Core-V1_2-20201110-A.html#7-4-7-0-747-SenML-CBOR)
 
-Records are also supported in conjunction with keyMaps, but these are disabled by default when keyMaps are specified as use of the two features does not introduce any additonal compression efficiency when the data array are relativly small (<10 items).
+Records are also supported in conjunction with keyMaps, but these are disabled by default when keyMaps are specified as use of the two features does not introduce any additional compression efficiency unless that the data arrays are quite large (> 10 items).
 
 ```JavaScript
 import { Encoder } from 'cbor-x'
