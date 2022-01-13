@@ -43,17 +43,3 @@ function test(data, opts, its=1000) {
 
 perfTest(small, 'Small')
 perfTest(large, 'Large')
-/*
-test('Basic no Recs (Small)', small, { useRecords: false})
-test('Senml no Recs (Small)', small, { useREcords: false, keyMap: senmlKeys})
-
-test('Basic wi Recs (Small)', small, { useRecords: true})
-test('Senml wi Recs (Small)', small, { useRecords: true, keyMap: senmlKeys})
-
-test('Basic no Recs (Large)', large, { useRecords: false})
-test('Senml no Recs (Large)', large, { useRecords: false, keyMap: senmlKeys})
-
-test('Basic wi Recs (Large)', large, { useRecords: true})
-test('Senml wi Recs (Large)', large, { useRecords: true, keyMap: senmlKeys})
-*/
-
