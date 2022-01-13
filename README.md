@@ -158,13 +158,13 @@ const data = [
 ]
 
 let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, n: 0, u: 1, v: 2, vs: 3, t: 6, ut: 7, vd: 8 }
-let senmlEncoder = new Encoder({ keyMap: senmlKeys })
-let basicEncoder = new Ecoder()
-let senmlCbor = senmlEncoder.encode(data)
-let basicCbor = basicEncoder.encode(data)
-console.log('SenmlCBOR size:', senmlCbor.length) // 77
-console.log('basicCBOR size:', basicCbor.length) // 90
-assert.deepEqual(senmlEncoder.decode(senMlCbor), data
+let senmlCbor = new Encoder({ keyMap: senmlKeys })
+let basicCbor = new Encoder()
+let senmlBuff = senmlCbor.encode(data)
+let basicBuff = basicCbor.encode(data)
+console.log('SenmlCBOR size:', senmlBuff.length) // 77
+console.log('basicCBOR size:', basicBuff.length) // 90
+assert.deepEqual(senmlEncoder.decode(senmlBuff), data)
 
 ```
 
