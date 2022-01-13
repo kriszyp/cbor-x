@@ -1,50 +1,50 @@
 Map(3) { -2 => '/3303/0/5700', -3 => 1278887, 2 => 35.5 }
-Basic No Recs: Small
+Basic  No Recs: Small
   Buffer: 100% 	(92)
-  Encode: 100% 	(0.009)
+  Encode: 100% 	(0.01)
   Decode: 100% 	(0.007)
 PreMap No Recs: Small
   Buffer: 90% 	(83)
-  Encode: 111% 	(0.01)
-  Decode: 71% 	(0.005)
-Senml No Recs: Small
-  Buffer: 84% 	(77)
-  Encode: 67% 	(0.006)
+  Encode: 100% 	(0.01)
   Decode: 86% 	(0.006)
-Basic Wi Recs: Small
+KeyMap No Recs: Small
+  Buffer: 84% 	(77)
+  Encode: 60% 	(0.006)
+  Decode: 100% 	(0.007)
+Basic  Wi Recs: Small
   Buffer: 98% 	(90)
-  Encode: 100% 	(0.009)
+  Encode: 90% 	(0.009)
   Decode: 100% 	(0.007)
 PreMap Wi Recs: Small
   Buffer: 71% 	(65)
-  Encode: 89% 	(0.008)
-  Decode: 71% 	(0.005)
-Senml Wi Recs: Small
+  Encode: 90% 	(0.009)
+  Decode: 57% 	(0.004)
+KeyMap Wi Recs: Small
   Buffer: 90% 	(83)
-  Encode: 133% 	(0.012)
-  Decode: 71% 	(0.005)
+  Encode: 110% 	(0.011)
+  Decode: 86% 	(0.006)
 Map(3) { 6 => 100, 0 => '1', 3 => 'value-0' }
-Basic No Recs: Large
+Basic  No Recs: Large
   Buffer: 100% 	(24737)
-  Encode: 100% 	(0.156)
-  Decode: 100% 	(0.185)
+  Encode: 100% 	(0.157)
+  Decode: 100% 	(0.183)
 PreMap No Recs: Large
   Buffer: 88% 	(21737)
   Encode: 69% 	(0.108)
-  Decode: 73% 	(0.135)
-Senml No Recs: Large
+  Decode: 73% 	(0.134)
+KeyMap No Recs: Large
   Buffer: 84% 	(20737)
-  Encode: 142% 	(0.221)
-  Decode: 190% 	(0.352)
-Basic Wi Recs: Large
+  Encode: 141% 	(0.222)
+  Decode: 191% 	(0.35)
+Basic  Wi Recs: Large
   Buffer: 76% 	(18748)
-  Encode: 134% 	(0.209)
-  Decode: 54% 	(0.1)
+  Encode: 136% 	(0.214)
+  Decode: 54% 	(0.098)
 PreMap Wi Recs: Large
   Buffer: 76% 	(18737)
-  Encode: 62% 	(0.096)
-  Decode: 65% 	(0.121)
-Senml Wi Recs: Large
+  Encode: 64% 	(0.1)
+  Decode: 68% 	(0.124)
+KeyMap Wi Recs: Large
   Buffer: 76% 	(18744)
-  Encode: 184% 	(0.287)
-  Decode: 52% 	(0.096)
+  Encode: 182% 	(0.286)
+  Decode: 52% 	(0.095)
