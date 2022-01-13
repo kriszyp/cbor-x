@@ -27,12 +27,12 @@ function preMap(data) {
 function perfTest(data, label) {
   let basic = test(data, {useRecords: false})
   let maps = preMap(data)
-  compare(`Basic No Recs: ${label}`, basic, basic)
+  compare(`Basic  No Recs: ${label}`, basic, basic)
   compare(`PreMap No Recs: ${label}`, test(maps, {useRecords: false}), basic)
-  compare(`Senml No Recs: ${label}`, test(data, {useRecords: false, keyMap: senmlKeys}), basic)
-  compare(`Basic Wi Recs: ${label}`, test(data, {useRecords: true}), basic)
+  compare(`KeyMap No Recs: ${label}`, test(data, {useRecords: false, keyMap: senmlKeys}), basic)
+  compare(`Basic  Wi Recs: ${label}`, test(data, {useRecords: true}), basic)
   compare(`PreMap Wi Recs: ${label}`, test(maps, {useRecords: true}), basic)
-  compare(`Senml Wi Recs: ${label}`, test(data, {useRecords: true,  keyMap: senmlKeys}), basic)  
+  compare(`KeyMap Wi Recs: ${label}`, test(data, {useRecords: true,  keyMap: senmlKeys}), basic)  
  }
 
 function compare(label, r1, r2) {
