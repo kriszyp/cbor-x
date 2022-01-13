@@ -162,8 +162,8 @@ let senmlCbor = new Encoder({ keyMap: senmlKeys })
 let basicCbor = new Encoder()
 let senmlBuff = senmlCbor.encode(data)
 let basicBuff = basicCbor.encode(data)
-console.log('SenmlCBOR size:', senmlBuff.length) // 77
-console.log('basicCBOR size:', basicBuff.length) // 90
+console.log('Senml CBOR size:', senmlBuff.length) // 77
+console.log('Basic CBOR size:', basicBuff.length) // 90
 assert.deepEqual(senmlEncoder.decode(senmlBuff), data)
 
 ```
