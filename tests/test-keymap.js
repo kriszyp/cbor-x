@@ -24,7 +24,7 @@ function compare(label, r1, r2) {
   if (!r2) r2 = r1
   console.log(label) 
   let pct = (n1, n2) => Math.round(100 * (n2/n1)) 
-  console.log(`  Buffer: ${pct(r2.bufLen,   r1.size)}% \t(${r1.bufLen})`)
+  console.log(`  Buffer: ${pct(r2.bufLen, r1.bufLen)}% \t(${r1.bufLen})`)
   console.log(`  Encode: ${pct(r2.encAvg, r1.encAvg)}% \t(${r1.encAvg})`)
   console.log(`  Decode: ${pct(r2.decAvg, r1.decAvg)}% \t(${r1.decAvg})`)
 }
