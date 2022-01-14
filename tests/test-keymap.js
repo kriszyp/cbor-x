@@ -30,9 +30,12 @@ function perfTest(data, label) {
   compare(`Basic  No Recs: ${label}`, basic, basic)
   compare(`PreMap No Recs: ${label}`, test(maps, {useRecords: false}), basic)
   compare(`KeyMap No Recs: ${label}`, test(data, {useRecords: false, keyMap: senmlKeys}), basic)
+  compare(`Optima No Recs: ${label}`, test(data, {useRecords: false, _keyMap: senmlKeys}), basic)
   compare(`Basic  Wi Recs: ${label}`, test(data, {useRecords: true}), basic)
   compare(`PreMap Wi Recs: ${label}`, test(maps, {useRecords: true}), basic)
-  compare(`KeyMap Wi Recs: ${label}`, test(data, {useRecords: true,  keyMap: senmlKeys}), basic)  
+  compare(`KeyMap Wi Recs: ${label}`, test(data, {useRecords: true,  keyMap: senmlKeys}), basic) 
+  compare(`Optima Wi Recs: ${label}`, test(data, {useRecords: true,  _keyMap: senmlKeys}), basic) 
+   
  }
 
 function compare(label, r1, r2) {
@@ -46,13 +49,13 @@ function compare(label, r1, r2) {
 
 function test(data, opts, its=1000) { 
   let cbor = new Encoder(opts)
-  let buff = cbor.encode(data)
+  let buff = cbor.mapEncode(data)
   let t1 = Date.now()
-  for (let i = 0; i < its; i++) cbor.encode(data)
+  for (let i = 0; i < its; i++) cbor.mapEncode(data)
   let t2 = Date.now()
-  for (let i = 0; i < its; i++) cbor.decode(buff)
+  for (let i = 0; i < its; i++) cbor.mapDecode(buff)
   let t3 = Date.now()
-  assert.deepEqual(cbor.decode(buff), data)
+  assert.deepEqual(cbor.mapDecode(buff), data)
   return {bufLen: buff.length, encAvg: (t2-t1)/its, decAvg: (t3-t2)/its }
 }
 

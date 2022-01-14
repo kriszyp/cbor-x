@@ -37,13 +37,17 @@ let sequentialMode = false
 export class Decoder {
 	constructor(options) {
 		if (options) {
-			if (options.keyMap && !options.useRecords) options.useRecords = false
+			if ((options.keyMap || options._keyMap) && !options.useRecords) {
+				options.useRecords = false
+				options.mapsAsObjects = true
+			}
 			if (options.useRecords === false && options.mapsAsObjects === undefined)
 				options.mapsAsObjects = true
 			if (options.getStructures && !options.structures)
 				(options.structures = []).uninitialized = true // this is what we use to denote an uninitialized structures
 		}
 		Object.assign(this, options)
+		
 	}
 	
 	decodeKey(key) {
@@ -54,6 +58,38 @@ export class Decoder {
 
 	encodeKey(key) {
 		return this.keyMap && this.keyMap.hasOwnProperty(key) ? this.keyMap[key] : key
+	}
+
+	encodeKeys(rec) {
+		if (!this._keyMap) return rec
+		let map = new Map()
+		for (let [k,v] of Object.entries(rec)) map.set((this._keyMap.hasOwnProperty(k) ? this._keyMap[k] : k), v)
+		return map
+	}
+
+	decodeKeys(map) {
+		if (!this._keyMap || map.constructor.name != 'Map') return map
+		if (!this._mapKey) {
+			this._mapKey = new Map()
+			for (let [k,v] of Object.entries(this._keyMap)) this._mapKey.set(v,k)
+		}
+		let res = {}
+		//map.forEach((v,k) => res[Object.keys(this._keyMap)[Object.values(this._keyMap).indexOf(k)] || k] = v)
+		map.forEach((v,k) => res[this._mapKey.has(k) ? this._mapKey.get(k) : k] =  v)
+		return res
+	}
+	
+	mapDecode(source, end) {
+	
+		let res = this.decode(source)
+		if (this._keyMap) { 
+			//Experiemntal support for Optimised KeyMap  decoding 
+			switch (res.constructor.name) {
+				case 'Array': return res.map(r => this.decodeKeys(r))
+				//case 'Map': return this.decodeKeys(res)
+			}
+		}
+		return res
 	}
 
 	decode(source, end) {

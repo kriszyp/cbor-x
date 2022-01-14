@@ -57,7 +57,24 @@ export class Encoder extends Decoder {
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
 		
-		this.encode = function(value, encodeOptions) {
+		this.mapEncode = function(value, encodeOptions) {
+			// Experimental support for premapping keys using _keyMap instad of keyMap - not optiimised yet)
+			if (this._keyMap && !this._mapped) {
+				//console.log('encoding ', value)
+				switch (value.constructor.name) {
+					case 'Array': 
+						value = value.map(r => this.encodeKeys(r))
+						break
+					//case 'Map': 
+					//	value = this.encodeKeys(value)
+					//	break
+				}
+				//this._mapped = true
+			}
+			return this.encode(value, encodeOptions)
+		}
+		
+		this.encode = function(value, encodeOptions)	{
 			if (!target) {
 				target = new ByteArrayAllocate(8192)
 				targetView = new DataView(target.buffer, 0, 8192)
