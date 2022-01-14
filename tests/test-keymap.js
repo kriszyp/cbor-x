@@ -12,7 +12,7 @@ let large = []
 
 for (let i = 0; i < 1000; i++) large.push({ t: 100+i, n: '1', vs: 'value-'+i } )
 
-let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, n: 0, u: 1, v: 2, vs: 3, t: 6, ut: 7, vd: 8 }
+let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, bver: -1, n: 0, u: 1, v: 2, vs: 3, vb: 4, s: 5, t: 6, ut: 7, vd: 8 }
 
 function reverse(obj) {
   let rev = new Map()

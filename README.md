@@ -157,7 +157,7 @@ const data = [
 	{ t: 50, v: 30 } 
 ]
 
-let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, n: 0, u: 1, v: 2, vs: 3, t: 6, ut: 7, vd: 8 }
+let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, bver: -1, n: 0, u: 1, v: 2, vs: 3, vb: 4, s: 5, t: 6, ut: 7, vd: 8}}
 let senmlCbor = new Encoder({ keyMap: senmlKeys })
 let basicCbor = new Encoder()
 let senmlBuff = senmlCbor.encode(data)

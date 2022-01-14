@@ -49,13 +49,22 @@ export class Decoder {
 		Object.assign(this, options)
 		
 	}
-	
+	/*
 	decodeKey(key) {
 		return this.keyMap
 			? Object.keys(this.keyMap)[Object.values(this.keyMap).indexOf(key)] || key
 			: key
 	}
-
+	*/
+	decodeKey(key) {
+		if (!this.keyMap) return key
+		if (!this.mapKey) {
+			this.mapKey = new Map()
+			for (let [k,v] of Object.entries(this.keyMap)) this.mapKey.set(v,k)
+		}
+		return this.mapKey.get(key) || key
+	}
+	
 	encodeKey(key) {
 		return this.keyMap && this.keyMap.hasOwnProperty(key) ? this.keyMap[key] : key
 	}
