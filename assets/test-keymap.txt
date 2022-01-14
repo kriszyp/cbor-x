@@ -9,12 +9,16 @@ PreMap No Recs: Small
   Decode: 86% 	(0.006)
 KeyMap No Recs: Small
   Buffer: 84% 	(77)
-  Encode: 60% 	(0.006)
+  Encode: 70% 	(0.007)
+  Decode: 86% 	(0.006)
+Optima No Recs: Small
+  Buffer: 90% 	(83)
+  Encode: 130% 	(0.013)
   Decode: 100% 	(0.007)
 Basic  Wi Recs: Small
   Buffer: 98% 	(90)
   Encode: 90% 	(0.009)
-  Decode: 100% 	(0.007)
+  Decode: 114% 	(0.008)
 PreMap Wi Recs: Small
   Buffer: 71% 	(65)
   Encode: 90% 	(0.009)
@@ -22,29 +26,41 @@ PreMap Wi Recs: Small
 KeyMap Wi Recs: Small
   Buffer: 90% 	(83)
   Encode: 110% 	(0.011)
-  Decode: 86% 	(0.006)
+  Decode: 71% 	(0.005)
+Optima Wi Recs: Small
+  Buffer: 71% 	(65)
+  Encode: 100% 	(0.01)
+  Decode: 43% 	(0.003)
 Map(3) { 6 => 100, 0 => '1', 3 => 'value-0' }
 Basic  No Recs: Large
   Buffer: 100% 	(24737)
-  Encode: 100% 	(0.157)
-  Decode: 100% 	(0.183)
+  Encode: 100% 	(0.178)
+  Decode: 100% 	(0.211)
 PreMap No Recs: Large
   Buffer: 88% 	(21737)
-  Encode: 69% 	(0.108)
-  Decode: 73% 	(0.134)
+  Encode: 80% 	(0.142)
+  Decode: 73% 	(0.154)
 KeyMap No Recs: Large
   Buffer: 84% 	(20737)
-  Encode: 141% 	(0.222)
-  Decode: 191% 	(0.35)
+  Encode: 134% 	(0.239)
+  Decode: 176% 	(0.372)
+Optima No Recs: Large
+  Buffer: 88% 	(21737)
+  Encode: 175% 	(0.311)
+  Decode: 165% 	(0.349)
 Basic  Wi Recs: Large
   Buffer: 76% 	(18748)
-  Encode: 136% 	(0.214)
-  Decode: 54% 	(0.098)
+  Encode: 131% 	(0.233)
+  Decode: 48% 	(0.101)
 PreMap Wi Recs: Large
   Buffer: 76% 	(18737)
-  Encode: 64% 	(0.1)
-  Decode: 68% 	(0.124)
+  Encode: 74% 	(0.132)
+  Decode: 65% 	(0.137)
 KeyMap Wi Recs: Large
   Buffer: 76% 	(18744)
-  Encode: 182% 	(0.286)
-  Decode: 52% 	(0.095)
+  Encode: 169% 	(0.3)
+  Decode: 46% 	(0.098)
+Optima Wi Recs: Large
+  Buffer: 76% 	(18737)
+  Encode: 167% 	(0.298)
+  Decode: 152% 	(0.321)
