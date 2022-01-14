@@ -44,7 +44,6 @@ function preMapEncode(data) {
 
 function perfTest(data, label) {
   let basic = test(data, {useRecords: false})
-  //let maps = preMap(data)
   compare(`Basic  No Recs: ${label}`, basic, basic)
   compare(`PreMap No Recs: ${label}`, test(data, {useRecords: false}, true), basic)
   compare(`KeyMap No Recs: ${label}`, test(data, {useRecords: false, keyMap: senmlKeys}), basic)
@@ -53,7 +52,7 @@ function perfTest(data, label) {
   compare(`PreMap Wi Recs: ${label}`, test(data, {useRecords: true}, true), basic)
   compare(`KeyMap Wi Recs: ${label}`, test(data, {useRecords: true,  keyMap: senmlKeys}), basic) 
   compare(`Optima Wi Recs: ${label}`, test(data, {useRecords: true,  _keyMap: senmlKeys}), basic) 
- }
+}
 
 function compare(label, r1, r2) {
   if (!r2) r2 = r1
@@ -70,11 +69,10 @@ function test(data, opts, preMap, its=1000) {
   let encode = (d) => preMap ? cbor.encode(preMapEncode(d)) : cbor.mapEncode(d)
   let buff = encode(data)
   let t1 = Date.now()
-  for (let i = 0; i < its; i++) encode(data)
+  for (let i = 0; i < its; i++) assert.deepEqual(encode(data), buff) 
   let t2 = Date.now()
-  for (let i = 0; i < its; i++) decode(buff)
+  for (let i = 0; i < its; i++) assert.deepEqual(decode(buff), data)
   let t3 = Date.now()
-  assert.deepEqual(decode(buff), data) 
   return {bufLen: buff.length, encAvg: (t2-t1)/its, decAvg: (t3-t2)/its }
 }
 

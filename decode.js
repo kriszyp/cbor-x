@@ -46,8 +46,11 @@ export class Decoder {
 			if (options.getStructures && !options.structures)
 				(options.structures = []).uninitialized = true // this is what we use to denote an uninitialized structures
 		}
+		if (options.keyMap) {
+			this.mapKey = new Map()
+			for (let [k,v] of Object.entries(options.keyMap)) this.mapKey.set(v,k)
+		}
 		Object.assign(this, options)
-		
 	}
 	/*
 	decodeKey(key) {
@@ -57,12 +60,7 @@ export class Decoder {
 	}
 	*/
 	decodeKey(key) {
-		if (!this.keyMap) return key
-		if (!this.mapKey) {
-			this.mapKey = new Map()
-			for (let [k,v] of Object.entries(this.keyMap)) this.mapKey.set(v,k)
-		}
-		return this.mapKey.get(key) || key
+		return this.keyMap ? this.mapKey.get(key) || key : key
 	}
 	
 	encodeKey(key) {

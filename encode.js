@@ -487,10 +487,16 @@ export class Encoder extends Decoder {
 							targetView.setUint32(position, length)
 							position += 4
 						}
-						for (let [ key, entryValue ] of value) {
-							//encode(encodeKey(key))
-							encode(key)
-							encode(entryValue)
+						if (encoder.keyMap) { 
+							for (let [ key, entryValue ] of value) {
+								encode(encoder.encodeKey(key))
+								encode(entryValue)
+							} 
+						} else { 
+							for (let [ key, entryValue ] of value) {
+								encode(key) 
+								encode(entryValue)
+							} 	
 						}
 					} else {
 						for (let i = 0, l = extensions.length; i < l; i++) {
@@ -559,6 +565,7 @@ export class Encoder extends Decoder {
 		const writeObject = this.useRecords === false ? this.variableMapSize ? (object) => {
 			// this method is slightly slower, but generates "preferred serialization" (optimally small for smaller objects)
 			let keys = Object.keys(object)
+			let vals = Object.values(object)
 			let length = keys.length
 			if (length < 0x18) {
 				target[position++] = 0xa0 | length
@@ -575,9 +582,16 @@ export class Encoder extends Decoder {
 				position += 4
 			}
 			let key
-			for (let i = 0; i < length; i++) {
-				encode(key = encoder.keyMap ? encodeKey(keys[i]) : keys[i])
-				encode(object[key])
+			if (encoder.keyMap) { 
+				for (let i = 0; i < length; i++) {
+					encode(encodeKey(keys[i]))
+					encode(vals[i])
+				}
+			} else {
+				for (let i = 0; i < length; i++) {
+					encode(keys[i])
+					encode(vals[i])
+				}
 			}
 		} :
 		(object, safePrototype) => {
@@ -585,10 +599,16 @@ export class Encoder extends Decoder {
 			let objectOffset = position - start
 			position += 2
 			let size = 0
-			for (let key in object) {
-				if (safePrototype || object.hasOwnProperty(key)) {
-					encode(encoder.keyMap ? encoder.encodeKey(key) : key)
+			if (encoder.keyMap) { 
+				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+					encode(encoder.encodeKey(key))
 					encode(object[key])
+					size++
+				}
+			} else { 
+				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+						encode(key)
+						encode(object[key])
 					size++
 				}
 			}
@@ -638,6 +658,7 @@ export class Encoder extends Decoder {
 		}*/
 		(object) => {
 			let keys = Object.keys(object)
+			let vals = Object.values(object)
 			if (this.keyMap) keys = keys.map(k => this.encodeKey(k))
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
@@ -696,7 +717,7 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
-			for (let i =0; i < length; i++) encode(Object.values(object)[i])
+			for (let i =0; i < length; i++) encode(vals[i])
 		}
 		const makeRoom = (end) => {
 			let newSize
