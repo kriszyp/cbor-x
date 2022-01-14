@@ -66,13 +66,15 @@ function compare(label, r1, r2) {
 
 function test(data, opts, preMap, its=1000) { 
   let cbor = new Encoder(opts)
-  let buff = preMap ? cbor.encode(preMapEncode(data)) : cbor.mapEncode(data)
+  let decode = (b) => preMap ? preMapDecode(cbor.decode(b)) : cbor.mapDecode(b)
+  let encode = (d) => preMap ? cbor.encode(preMapEncode(d)) : cbor.mapEncode(d)
+  let buff = encode(data)
   let t1 = Date.now()
-  for (let i = 0; i < its; i++) preMap ? cbor.encode(preMapEncode(data)) : cbor.mapEncode(data)
+  for (let i = 0; i < its; i++) encode(data)
   let t2 = Date.now()
-  for (let i = 0; i < its; i++) preMap ? preMapDecode(cbor.decode(buff)) : cbor.mapDecode(buff)
+  for (let i = 0; i < its; i++) decode(buff)
   let t3 = Date.now()
-  assert.deepEqual(preMap ? preMapDecode(cbor.decode(buff)) : cbor.mapDecode(buff), data)
+  assert.deepEqual(decode(buff), data) 
   return {bufLen: buff.length, encAvg: (t2-t1)/its, decAvg: (t3-t2)/its }
 }
 
