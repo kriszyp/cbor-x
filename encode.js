@@ -232,7 +232,7 @@ export class Encoder extends Decoder {
 						hasSharedUpdate = true
 					}
 				}
-				while (this.updateSharedData() === false) {}
+				while (this.saveShared && this.updateSharedData() === false) {}
 				samplingPackedValues = null
 			}
 		}

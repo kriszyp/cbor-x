@@ -47,10 +47,10 @@ export class Decoder {
 				options.getShared = options.getStructures
 			if (options.getShared && !options.structures)
 				(options.structures = []).uninitialized = true // this is what we use to denote an uninitialized structures
-		}
-		if (options.keyMap) {
-			this.mapKey = new Map()
-			for (let [k,v] of Object.entries(options.keyMap)) this.mapKey.set(v,k)
+			if (options.keyMap) {
+				this.mapKey = new Map()
+				for (let [k,v] of Object.entries(options.keyMap)) this.mapKey.set(v,k)
+			}
 		}
 		Object.assign(this, options)
 	}
