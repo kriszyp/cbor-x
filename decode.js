@@ -39,7 +39,9 @@ export class Decoder {
 		if (options) {
 			if (options.useRecords === false && options.mapsAsObjects === undefined)
 				options.mapsAsObjects = true
-			if (options.getStructures && !options.structures)
+			if (options.getStructures)
+				options.getShared = options.getStructures
+			if (options.getShared && !options.structures)
 				(options.structures = []).uninitialized = true // this is what we use to denote an uninitialized structures
 		}
 		Object.assign(this, options)
@@ -307,17 +309,8 @@ export function read() {
 					} else if (token == BUNDLED_STRINGS_ID) {
 						return readBundleExt()
 					}
-					if (currentDecoder.getStructures) {
-						let sharedData = saveState(() => {
-							// save the state in case getStructures modifies our buffer
-							src = null
-							return currentDecoder.getStructures()
-						})
-						let updatedStructures = sharedData.structures
-						if (currentStructures === true)
-							currentDecoder.structures = currentStructures = updatedStructures
-						else
-							currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
+					if (currentDecoder.getShared) {
+						loadShared()
 						structure = currentStructures[token & 0x1fff]
 						if (structure) {
 							if (!structure.read)
@@ -350,7 +343,7 @@ export function read() {
 				case 0x17: return; // undefined
 				case 0x1f:
 				default:
-					let packedValue = packedValues[token]
+					let packedValue = (packedValues || getPackedValues())[token]
 					if (packedValue !== undefined)
 						return packedValue
 					throw new Error('Unknown token ' + token)
@@ -833,6 +826,12 @@ packedTable.handlesRead = true
 currentExtensions[51] = packedTable
 
 currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
+	if (!packedValues) {
+		if (currentDecoder.getShared)
+			loadShared()
+		else
+			return new Tag(data, PACKED_REFERENCE_TAG_ID)
+	}
 	if (typeof data == 'number')
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
 	throw new Error('No support for non-integer packed references yet')
@@ -900,24 +899,34 @@ function combine(a, b) {
 		return a.concat(b)
 	return Object.assign({}, a, b)
 }
+function getPackedValues() {
+	if (!packedValues) {
+		if (currentDecoder.getShared)
+			loadShared()
+		else
+			throw new Error('No packed values available')
+	}
+	return packedValues
+}
 const SHARED_DATA_TAG_ID = 0x53687264 // ascii 'Shrd'
 currentExtensionRanges.push((tag, input) => {
 	if (tag >= 225 && tag <= 255)
-		return combine(packedValues.prefixes[tag - 224], input)
+		return combine(getPackedValues().prefixes[tag - 224], input)
 	if (tag >= 28704 && tag <= 32767)
-		return combine(packedValues.prefixes[tag - 28672], input)
+		return combine(getPackedValues().prefixes[tag - 28672], input)
 	if (tag >= 1879052288 && tag <= 2147483647)
-		return combine(packedValues.prefixes[tag - 1879048192], input)
+		return combine(getPackedValues().prefixes[tag - 1879048192], input)
 	if (tag >= 216 && tag <= 223)
-		return combine(input, packedValues.suffixes[tag - 216])
+		return combine(input, getPackedValues().suffixes[tag - 216])
 	if (tag >= 27647 && tag <= 28671)
-		return combine(input, packedValues.suffixes[tag - 27639])
+		return combine(input, getPackedValues().suffixes[tag - 27639])
 	if (tag >= 1811940352 && tag <= 1879048191)
-		return combine(input, packedValues.suffixes[tag - 1811939328])
+		return combine(input, getPackedValues().suffixes[tag - 1811939328])
 	if (tag == SHARED_DATA_TAG_ID) {// we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
 		return {
-			packed: packedValues,
-			structures: currentStructures
+			packedValues: packedValues,
+			structures: currentStructures.slice(0),
+			version: input,
 		}
 	}
 })
@@ -972,6 +981,23 @@ function readJustLength() {
 		}
 	}
 	return token
+}
+
+function loadShared() {
+	if (currentDecoder.getShared) {
+		let sharedData = saveState(() => {
+			// save the state in case getShared modifies our buffer
+			src = null
+			return currentDecoder.getShared()
+		}) || {}
+		let updatedStructures = sharedData.structures || []
+		currentDecoder.sharedVersion = sharedData.version
+		packedValues = currentDecoder.sharedValues = sharedData.packedValues
+		if (currentStructures === true)
+			currentDecoder.structures = currentStructures = updatedStructures
+		else
+			currentStructures.splice.apply(currentStructures, [0, updatedStructures.length].concat(updatedStructures))
+	}
 }
 
 function saveState(callback) {

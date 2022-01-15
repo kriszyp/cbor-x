@@ -30,7 +30,6 @@ export class Encoder extends Decoder {
 		let structures
 		let referenceMap
 		options = options || {}
-		let lastSharedStructuresLength = 0
 		let encodeUtf8 = ByteArray.prototype.utf8Write ? function(string, position, maxBytes) {
 			return target.utf8Write(string, position, maxBytes)
 		} : (textEncoder && textEncoder.encodeInto) ?
@@ -45,6 +44,8 @@ export class Encoder extends Decoder {
 			maxSharedStructures = 0
 			this.structures = []
 		}
+		if (this.saveStructures)
+			this.saveShared = this.saveStructures
 		let samplingPackedValues, packedObjectMap, sharedValues = options.sharedValues
 		let sharedPackedObjectMap
 		if (sharedValues) {
@@ -83,9 +84,15 @@ export class Encoder extends Decoder {
 			sharedStructures = encoder.structures
 			if (sharedStructures) {
 				if (sharedStructures.uninitialized) {
-					let sharedData = encoder.getStructures()
-					encoder.structures = sharedStructures = sharedData && sharedData.structures || []
-					encoder.sharedValues = sharedPackedObjectMap = sharedData && sharedData.sharedValues
+					let sharedData = encoder.getShared() || {}
+					encoder.structures = sharedStructures = sharedData.structures || []
+					encoder.sharedVersion = sharedData.version
+					let sharedValues = encoder.sharedValues = sharedData.packedValues
+					if (sharedValues) {
+						sharedPackedObjectMap = {}
+						for (let i = 0, l = sharedValues.length; i < l; i++)
+							sharedPackedObjectMap[sharedValues[i]] = i
+					}
 				}
 				let sharedStructuresLength = sharedStructures.length
 				if (sharedStructuresLength > maxSharedStructures && !isSequential)
@@ -108,7 +115,6 @@ export class Encoder extends Decoder {
 						}
 						transition[RECORD_SYMBOL] = i
 					}
-					lastSharedStructuresLength = sharedStructures.length
 				}
 				if (!isSequential)
 					sharedStructures.nextId = sharedStructuresLength
@@ -159,7 +165,7 @@ export class Encoder extends Decoder {
 					target.end = position
 					return target
 				}
-				return target.subarray(start, position) // position can change if we call pack again in saveStructures, so we get the buffer now
+				return target.subarray(start, position) // position can change if we call pack again in saveShared, so we get the buffer now
 			} finally {
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
@@ -177,27 +183,16 @@ export class Encoder extends Decoder {
 						}
 						recordIdsToRemove = []
 					}
-					if (hasSharedUpdate && encoder.saveStructures) {
-						if (encoder.structures.length > maxSharedStructures) {
-							encoder.structures = encoder.structures.slice(0, maxSharedStructures)
-						}
-						// we can't rely on start/end with REUSE_BUFFER_MODE since they will (probably) change when we save
-						let returnBuffer = target.subarray(start, position)
-						let shared = encoder.structures || []
-						if (sharedValues) {
-							shared = shared.concat(sharedValues)
-						}
-
-						if (encoder.saveStructures(new SharedData(encoder.structures, sharedValues, encoder.sharedVersion), encoder.sharedVersion) === false) {
-							// get updated structures and try again if the update failed
-							let sharedData = encoder.getStructures()
-							encoder.structures = sharedStructures = sharedData && sharedData.structures || []
-							encoder.sharedValues = sharedPackedObjectMap = sharedData && sharedData.sharedValues
-							return encoder.encode(value)
-						}
-						lastSharedStructuresLength = shared.length
-						return returnBuffer
+				}
+				if (hasSharedUpdate && encoder.saveShared) {
+					if (encoder.structures.length > maxSharedStructures) {
+						encoder.structures = encoder.structures.slice(0, maxSharedStructures)
 					}
+					// we can't rely on start/end with REUSE_BUFFER_MODE since they will (probably) change when we save
+					let returnBuffer = target.subarray(start, position)
+					if (encoder.updateSharedData() === false)
+						return encoder.encode(value) // re-encode if it fails
+					return returnBuffer
 				}
 				if (encodeOptions & RESET_BUFFER_MODE)
 					position = start
@@ -207,8 +202,8 @@ export class Encoder extends Decoder {
 			samplingPackedValues = new Map()
 			if (!sharedPackedObjectMap)
 				sharedPackedObjectMap = Object.create(null)
-			return ({ threshold }) => {
-				threshold = threshold || 4
+			return (options) => {
+				let threshold = options && options.threshold || 4
 				let position = this.pack ? options.maxPrivatePackedValues || 16 : 0
 				if (!sharedValues)
 					sharedValues = this.sharedValues = []
@@ -219,6 +214,7 @@ export class Encoder extends Decoder {
 						hasSharedUpdate = true
 					}
 				}
+				while (this.updateSharedData() === false) {}
 				samplingPackedValues = null
 			}
 		}
@@ -709,11 +705,31 @@ export class Encoder extends Decoder {
 		targetView = new DataView(target.buffer, target.byteOffset, target.byteLength)
 		position = 0
 	}
+	clearSharedData() {
+		if (this.structures)
+			this.structures = []
+		if (this.sharedValues)
+			this.sharedValues = undefined
+	}
+	updateSharedData() {
+		let lastVersion = this.sharedVersion || 0
+		this.sharedVersion = lastVersion + 1
+		let saveResults = this.saveShared(new SharedData(this.structures, this.sharedValues, this.sharedVersion),
+				existingShared => (existingShared && existingShared.version || 0) == lastVersion)
+		if (saveResults === false) {
+			// get updated structures and try again if the update failed
+			let sharedData = this.getShared() || {}
+			this.structures = sharedData.structures || []
+			this.sharedValues = sharedData.packedValues
+			this.sharedVersion = sharedData.version
+		}
+		return saveResults
+	}
 }
 class SharedData {
 	constructor(structures, values, version) {
 		this.structures = structures
-		this.values = values
+		this.packedValues = values
 		this.version = version
 	}
 }
@@ -852,7 +868,7 @@ extensions = [{
 	typedArrayEncoder(82),
 {
 	encode(sharedData, encode) { // write SharedData
-		let packedValues = sharedData.values || []
+		let packedValues = sharedData.packedValues || []
 		let sharedStructures = sharedData.structures || []
 		if (packedValues.values.length > 0) {
 			target[position++] = 0xd8 // one-byte tag
@@ -872,10 +888,10 @@ extensions = [{
 			position += 3
 			let definitions = sharedStructures.slice(0)
 			definitions.unshift(0xe000)
-			definitions.push(new Tag(++sharedStructures.version, 0x53687264))
+			definitions.push(new Tag(sharedData.version, 0x53687264))
 			encode(definitions)
 		} else
-			encode(new Tag(++sharedData.version, 0xdffd))
+			encode(new Tag(sharedData.version, 0x53687264))
 		}
 	}]
 
