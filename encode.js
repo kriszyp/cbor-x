@@ -57,8 +57,25 @@ export class Encoder extends Decoder {
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
-
-		this.encode = function(value, encodeOptions) {
+		
+		this.mapEncode = function(value, encodeOptions) {
+			// Experimental support for premapping keys using _keyMap instad of keyMap - not optiimised yet)
+			if (this._keyMap && !this._mapped) {
+				//console.log('encoding ', value)
+				switch (value.constructor.name) {
+					case 'Array': 
+						value = value.map(r => this.encodeKeys(r))
+						break
+					//case 'Map': 
+					//	value = this.encodeKeys(value)
+					//	break
+				}
+				//this._mapped = true
+			}
+			return this.encode(value, encodeOptions)
+		}
+		
+		this.encode = function(value, encodeOptions)	{
 			if (!target) {
 				target = new ByteArrayAllocate(8192)
 				targetView = new DataView(target.buffer, 0, 8192)
@@ -102,6 +119,7 @@ export class Encoder extends Decoder {
 					sharedStructures.transitions = Object.create(null)
 					for (let i = 0; i < sharedStructuresLength; i++) {
 						let keys = sharedStructures[i]
+						//console.log('shared struct keys:', keys)
 						if (!keys)
 							continue
 						let nextTransition, transition = sharedStructures.transitions
@@ -465,11 +483,18 @@ export class Encoder extends Decoder {
 							targetView.setUint32(position, length)
 							position += 4
 						}
-						for (let [ key, entryValue ] of value) {
-							encode(key)
-							encode(entryValue)
+						if (encoder.keyMap) { 
+							for (let [ key, entryValue ] of value) {
+								encode(encoder.encodeKey(key))
+								encode(entryValue)
+							} 
+						} else { 
+							for (let [ key, entryValue ] of value) {
+								encode(key) 
+								encode(entryValue)
+							} 	
 						}
-					} else {	
+					} else {
 						for (let i = 0, l = extensions.length; i < l; i++) {
 							let extensionClass = extensionClasses[i]
 							if (value instanceof extensionClass) {
@@ -536,6 +561,7 @@ export class Encoder extends Decoder {
 		const writeObject = this.useRecords === false ? this.variableMapSize ? (object) => {
 			// this method is slightly slower, but generates "preferred serialization" (optimally small for smaller objects)
 			let keys = Object.keys(object)
+			let vals = Object.values(object)
 			let length = keys.length
 			if (length < 0x18) {
 				target[position++] = 0xa0 | length
@@ -552,9 +578,16 @@ export class Encoder extends Decoder {
 				position += 4
 			}
 			let key
-			for (let i = 0; i < length; i++) {
-				encode(key = keys[i])
-				encode(object[key])
+			if (encoder.keyMap) { 
+				for (let i = 0; i < length; i++) {
+					encode(encodeKey(keys[i]))
+					encode(vals[i])
+				}
+			} else {
+				for (let i = 0; i < length; i++) {
+					encode(keys[i])
+					encode(vals[i])
+				}
 			}
 		} :
 		(object, safePrototype) => {
@@ -562,10 +595,16 @@ export class Encoder extends Decoder {
 			let objectOffset = position - start
 			position += 2
 			let size = 0
-			for (let key in object) {
-				if (safePrototype || object.hasOwnProperty(key)) {
-					encode(key)
+			if (encoder.keyMap) { 
+				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+					encode(encoder.encodeKey(key))
 					encode(object[key])
+					size++
+				}
+			} else { 
+				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+						encode(key)
+						encode(object[key])
 					size++
 				}
 			}
@@ -615,13 +654,15 @@ export class Encoder extends Decoder {
 		}*/
 		(object) => {
 			let keys = Object.keys(object)
+			let vals = Object.values(object)
+			if (this.keyMap) keys = keys.map(k => this.encodeKey(k))
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = keys.length
 			//let parentRecordId
 			for (let i = 0; i < length; i++) {
-				let key = keys[i]
 				//if (!parentRecordId)
+				let key = keys[i]
 				//	parentRecordId = transition[RECORD_SYMBOL]
 				nextTransition = transition[key]
 				if (!nextTransition) {
@@ -663,9 +704,7 @@ export class Encoder extends Decoder {
 					writeArrayHeader(length + 2)
 					encode(0xe000 + recordId)
 					encode(keys)
-					// now write the values
-					for (let i =0; i < length; i++)
-						encode(object[keys[i]])
+					for (let v of Object.values(object)) encode(v)
 					return
 				}
 			}
@@ -674,8 +713,7 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
-			for (let i =0; i < length; i++)
-				encode(object[keys[i]])
+			for (let i =0; i < length; i++) encode(vals[i])
 		}
 		const makeRoom = (end) => {
 			let newSize

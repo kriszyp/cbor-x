@@ -7,6 +7,7 @@
 [![module](https://img.shields.io/badge/module-ESM%2FCJS-blue)](README.md)
 [![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
+
 The cbor-x package is an extremely fast and conformant CBOR NodeJS/JavaScript implementation. Currently, it is over 3-10x faster than any other CBOR JS implementation (including cbor-js and cborg) and faster than most MessagePack encoders, Avro, and generally faster than native V8 JSON.stringify/parse, on NodeJS. It implements the CBOR format as specificed in [RFC-8949](https://www.rfc-editor.org/rfc/rfc8949.html), [RFC-8746](https://tools.ietf.org/html/rfc8746), [RFC-8742](https://datatracker.ietf.org/doc/html/rfc8742), [Packed CBOR](https://www.ietf.org/id/draft-ietf-cbor-packed-03.html), numerous [registered IANA tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml) (the `x` in cbor-x),  and proposed optional [record extension](https://github.com/kriszyp/cbor-records), for defining record structures that makes CBOR even faster and more compact, often over twice as fast as even native JSON functions, and 15-50% more compact. See the performance section for more details. Structured cloning (with support for cyclical references) is supported through these tag extensions.
 <img align="right" src="./assets/performance.png" width="380"/>
 
@@ -139,15 +140,44 @@ decodeMultiple(data, (value) => {
 	// return false if you wish to end the parsing
 })
 ```
+### KeyMaps for Senml
+KeyMaps can be used to remap properties of source Objects and Maps to numerical equivalents for more efficient encoding. 
+The principle driver for this feature is to support `application/senml+cbor`content-encoding as defined in https://datatracker.ietf.org/doc/html/rfc8428#section-6 for use in LWM2M application (see http://www.openmobilealliance.org/release/LightweightM2M/V1_2-20201110-A/HTML-Version/OMA-TS-LightweightM2M_Core-V1_2-20201110-A.html#7-4-7-0-747-SenML-CBOR)
 
-CBOR Packing
+Records are also supported in conjunction with keyMaps, but these are disabled by default when keyMaps are specified as use of the two features does not introduce any additional compression efficiency unless that the data arrays are quite large (> 10 items).
+
+```JavaScript
+import { Encoder } from 'cbor-x'
+const data = [ 
+	{ bn: '/3303/0/5700', bt: 1278887, v: 35.5 },
+	{ t: 10, v: 34 },
+	{ t: 20, v: 33 },
+	{ t: 30, v: 32 },
+	{ t: 40, v: 31 },
+	{ t: 50, v: 30 } 
+]
+
+let senmlKeys = { bs: -6, bv: -5, bu: -4, bt: -3, bn: -2, bver: -1, n: 0, u: 1, v: 2, vs: 3, vb: 4, s: 5, t: 6, ut: 7, vd: 8}}
+let senmlCbor = new Encoder({ keyMap: senmlKeys })
+let basicCbor = new Encoder()
+let senmlBuff = senmlCbor.encode(data)
+let basicBuff = basicCbor.encode(data)
+console.log('Senml CBOR size:', senmlBuff.length) // 77
+console.log('Basic CBOR size:', basicBuff.length) // 90
+assert.deepEqual(senmlEncoder.decode(senmlBuff), data)
+
+```
+
+### CBOR Packing
 [Packed CBOR](https://datatracker.ietf.org/doc/html/draft-ietf-cbor-packed) is additional specification for CBOR which allows for compact encoding of data that has repeated values. Cbor-x supports decoding packed CBOR, no or flags/options needed. Cbor-x can also optionally generate packed CBOR (with the `pack` option), which will cause the encoder to look for repeated strings in a data structure that is being encoded, and store the strings in a packed table that can be referenced, to reduce encoding size. This involves extra overhead and reduces encoding performance, and generally does not yield as much compaction as standard compression tools. However, this is can be much faster than encoding plus compression, while still providing some level of reduction in encoding size. In addition to size reduction, packed CBOR is also usually faster to decode (assuming that some repetitive values could be found/packed).
 
 Cbor-x also has in-progress effort to support shared packed tables.
 
+
 ## Options
 The following options properties can be provided to the Encoder or Decoder constructor:
 
+* `keyMap` - This can be set to an object which will be used to map keys in the source Object or Map to other keys including integers. This allows for more efficient encoding, and enables support for numeric cbar tag encodings such as used by `application/senml+cbor` (https://datatracker.ietf.org/doc/html/rfc8428#section-6)
 * `useRecords` - Setting this to `false` disables the record extension and stores JavaScript objects as CBOR maps (with tag 259), and decodes maps as JavaScript `Object`s, which ensures compatibilty with other decoders.
 * `structures` - Provides the array of structures that is to be used for record extension, if you want the structures saved and used again. This array will be modified in place with new record structures that are serialized (if less than 64 structures are in the array).
 * `structuredClone` - This enables the structured cloning extensions that will encode object/cyclic references and additional built-in types/classes.
