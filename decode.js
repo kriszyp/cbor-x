@@ -802,7 +802,7 @@ export class Tag {
 	}
 }
 
-let glbl = typeof window == 'object' ? window : global
+let glbl = typeof self == 'object' ? self : global
 
 currentExtensions[0] = (dateString) => {
 	// string date extension
