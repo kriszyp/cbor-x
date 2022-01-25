@@ -165,7 +165,7 @@ export class Encoder extends Decoder {
 					target.end = position
 					return target
 				}
-				return target.subarray(start, position) // position can change if we call pack again in saveShared, so we get the buffer now
+				return target.subarray(start, position) // position can change if we call encode again in saveShared, so we get the buffer now
 			} finally {
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
@@ -573,7 +573,7 @@ export class Encoder extends Decoder {
 			target[objectOffset + start] = size & 0xff
 		} :
 
-	/*	sharedStructures ?  // For highly stable structures, using for-in can a little bit faster
+		/*((options.progressiveRecords && !useTwoByteRecords) ?  // this is about 2% faster for highly stable structures, since it only requires one for-in loop (but much more expensive when new structure needs to be written)
 		(object, safePrototype) => {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let objectOffset = position++ - start
@@ -581,46 +581,49 @@ export class Encoder extends Decoder {
 			for (let key in object) {
 				if (safePrototype || object.hasOwnProperty(key)) {
 					nextTransition = transition[key]
-					if (!nextTransition) {
-						nextTransition = transition[key] = Object.create(null)
-						nextTransition.__keys__ = (transition.__keys__ || []).concat([key])
-						/*let keys = Object.keys(object)
-						if 
-						let size = 0
-						let startBranch = transition.__keys__ ? transition.__keys__.length : 0
-						for (let i = 0, l = keys.length; i++) {
+					if (nextTransition)
+						transition = nextTransition
+					else {
+						// record doesn't exist, create full new record and insert it
+						let keys = Object.keys(object)
+						let lastTransition = transition
+						transition = structures.transitions
+						let newTransitions = 0
+						for (let i = 0, l = keys.length; i < l; i++) {
 							let key = keys[i]
-							size += key.length << 2
-							if (i >= startBranch) {
-								nextTransition = nextTransition[key] = Object.create(null)
-								nextTransition.__keys__ = keys.slice(0, i + 1)
+							nextTransition = transition[key]
+							if (!nextTransition) {
+								nextTransition = transition[key] = Object.create(null)
+								newTransitions++
 							}
+							transition = nextTransition
 						}
-						makeRoom(position + size)
-						nextTransition = transition[key]
-						target.copy(target, )
-						objectOffset
+						if (objectOffset + start + 1 == position) {
+							// first key, so we don't need to insert, we can just write record directly
+							position--
+							newRecord(transition, keys, newTransitions)
+						} else // otherwise we need to insert the record, moving existing data after the record
+							insertNewRecord(transition, keys, objectOffset, newTransitions)
+						wroteKeys = true
+						transition = lastTransition[key]
 					}
-					transition = nextTransition
-					encode(object[key])
+					pack(object[key])
 				}
 			}
-			let id = transition.id
-			if (!id) {
-				id = transition.id = structures.push(transition.__keys__) + 63
-				if (sharedStructures.onUpdate)
-					sharedStructures.onUpdate(id, transition.__keys__)
+			if (!wroteKeys) {
+				let recordId = transition[RECORD_SYMBOL]
+				if (recordId)
+					target[objectOffset + start] = recordId
+				else
+					insertNewRecord(transition, Object.keys(object), objectOffset, 0)
 			}
-			target[objectOffset + start] = id
-		}*/
-		(object) => {
-			let keys = Object.keys(object)
+		} :*/
+		(object, safePrototype) => {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
-			let length = keys.length
+			let length = 0
 			//let parentRecordId
-			for (let i = 0; i < length; i++) {
-				let key = keys[i]
+			for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
 				//if (!parentRecordId)
 				//	parentRecordId = transition[RECORD_SYMBOL]
 				nextTransition = transition[key]
@@ -629,6 +632,7 @@ export class Encoder extends Decoder {
 					newTransitions++
 				}
 				transition = nextTransition
+				length++
 			}
 			let recordId = transition[RECORD_SYMBOL]
 			if (recordId !== undefined) {
@@ -636,6 +640,7 @@ export class Encoder extends Decoder {
 				target[position++] = (recordId >> 8) | 0xe0
 				target[position++] = recordId & 0xff
 			} else {
+				let keys = transition.__keys__ || (transition.__keys__ = Object.keys(object))
 				recordId = structures.nextId++
 				if (!recordId) {
 					recordId = 0
@@ -674,8 +679,9 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
-			for (let i =0; i < length; i++)
-				encode(object[keys[i]])
+			for (let key in object)
+				if (safePrototype || object.hasOwnProperty(key))
+					encode(object[key])
 		}
 		const makeRoom = (end) => {
 			let newSize

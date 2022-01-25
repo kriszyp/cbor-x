@@ -53,7 +53,7 @@ if (cborX) {
   var encoder = new cborX.Encoder({  })
   buf = bench('cbor-x w/ records: encoder.encode(obj);', encoder.encode.bind(encoder), data);
   console.log('size', buf.length)
-debugger
+
   obj = bench('cbor-x w/ records: encoder.decode(buf);', encoder.decode.bind(encoder), buf);
   test(obj);
 
