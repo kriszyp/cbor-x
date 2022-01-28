@@ -38,12 +38,18 @@ export class Encoder extends Decoder {
 			} : false
 
 		let encoder = this
-		let maxSharedStructures = options.maxSharedStructures || 128
+		let hasSharedStructures = options.structures || options.saveStructures
+		let maxSharedStructures = options.maxSharedStructures
+		if (maxSharedStructures == null)
+			maxSharedStructures = hasSharedStructures ? 128 : 0
+		if (maxSharedStructures > 8190)
+			throw new Error('Maximum maxSharedStructure is 8190')
 		let isSequential = options.sequential
 		if (isSequential) {
 			maxSharedStructures = 0
-			this.structures = []
 		}
+		if (!this.structures)
+			this.structures = []
 		if (this.saveStructures)
 			this.saveShared = this.saveStructures
 		let samplingPackedValues, packedObjectMap, sharedValues = options.sharedValues
@@ -112,8 +118,10 @@ export class Encoder extends Decoder {
 								nextTransition = transition[key] = Object.create(null)
 							}
 							transition = nextTransition
+							if (transition[RECORD_SYMBOL] === undefined)
+								transition[RECORD_SYMBOL] = i
 						}
-						transition[RECORD_SYMBOL] = i
+						transition[RECORD_SYMBOL] = i | 0x100000
 					}
 				}
 				if (!isSequential)
@@ -170,6 +178,8 @@ export class Encoder extends Decoder {
 				if (sharedStructures) {
 					if (serializationsSinceTransitionRebuild < 10)
 						serializationsSinceTransitionRebuild++
+					if (sharedStructures.length > maxSharedStructures)
+						sharedStructures.length = maxSharedStructures
 					if (transitionsCount > 10000) {
 						// force a rebuild occasionally after a lot of transitions so it can get cleaned up
 						sharedStructures.transitions = null
@@ -182,6 +192,7 @@ export class Encoder extends Decoder {
 							recordIdsToRemove[i][RECORD_SYMBOL] = undefined
 						}
 						recordIdsToRemove = []
+						//sharedStructures.nextId = maxSharedStructures
 					}
 				}
 				if (hasSharedUpdate && encoder.saveShared) {
@@ -572,62 +583,17 @@ export class Encoder extends Decoder {
 			target[objectOffset++ + start] = size >> 8
 			target[objectOffset + start] = size & 0xff
 		} :
-
-		/*((options.progressiveRecords && !useTwoByteRecords) ?  // this is about 2% faster for highly stable structures, since it only requires one for-in loop (but much more expensive when new structure needs to be written)
-		(object, safePrototype) => {
-			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
-			let objectOffset = position++ - start
-			let wroteKeys
-			for (let key in object) {
-				if (safePrototype || object.hasOwnProperty(key)) {
-					nextTransition = transition[key]
-					if (nextTransition)
-						transition = nextTransition
-					else {
-						// record doesn't exist, create full new record and insert it
-						let keys = Object.keys(object)
-						let lastTransition = transition
-						transition = structures.transitions
-						let newTransitions = 0
-						for (let i = 0, l = keys.length; i < l; i++) {
-							let key = keys[i]
-							nextTransition = transition[key]
-							if (!nextTransition) {
-								nextTransition = transition[key] = Object.create(null)
-								newTransitions++
-							}
-							transition = nextTransition
-						}
-						if (objectOffset + start + 1 == position) {
-							// first key, so we don't need to insert, we can just write record directly
-							position--
-							newRecord(transition, keys, newTransitions)
-						} else // otherwise we need to insert the record, moving existing data after the record
-							insertNewRecord(transition, keys, objectOffset, newTransitions)
-						wroteKeys = true
-						transition = lastTransition[key]
-					}
-					pack(object[key])
-				}
-			}
-			if (!wroteKeys) {
-				let recordId = transition[RECORD_SYMBOL]
-				if (recordId)
-					target[objectOffset + start] = recordId
-				else
-					insertNewRecord(transition, Object.keys(object), objectOffset, 0)
-			}
-		} :*/
 		(object, safePrototype) => {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = 0
-			//let parentRecordId
+			let parentRecordId
 			for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
-				//if (!parentRecordId)
-				//	parentRecordId = transition[RECORD_SYMBOL]
 				nextTransition = transition[key]
 				if (!nextTransition) {
+					if (transition[RECORD_SYMBOL] & 0x100000) {// this indicates it is a brancheable/extendable terminal node, so we will use this record id and extend it
+						parentRecordId = transition[RECORD_SYMBOL] & 0xffff
+					}
 					nextTransition = transition[key] = Object.create(null)
 					newTransitions++
 				}
@@ -636,27 +602,39 @@ export class Encoder extends Decoder {
 			}
 			let recordId = transition[RECORD_SYMBOL]
 			if (recordId !== undefined) {
+				recordId &= 0xffff
 				target[position++] = 0xd9
 				target[position++] = (recordId >> 8) | 0xe0
 				target[position++] = recordId & 0xff
 			} else {
 				let keys = transition.__keys__ || (transition.__keys__ = Object.keys(object))
-				recordId = structures.nextId++
-				if (!recordId) {
-					recordId = 0
-					structures.nextId = 1
+				if (parentRecordId === undefined) {
+					recordId = structures.nextId++
+					if (!recordId) {
+						recordId = 0
+						structures.nextId = 1
+					}
+					if (recordId >= MAX_STRUCTURES) {// cycle back around
+						structures.nextId = (recordId = maxSharedStructures) + 1
+					}
+				} else {
+					recordId = parentRecordId
+					transition = structures.transitions
+					for (let i = 0; i < length; i++) {
+						transition = transition[keys[i]]
+						if (transition[RECORD_SYMBOL] === undefined)
+							transition[RECORD_SYMBOL] = recordId
+					}
 				}
-				if (recordId >= MAX_STRUCTURES) {// cycle back around
-					structures.nextId = (recordId = maxSharedStructures) + 1
-				}
-				transition[RECORD_SYMBOL] = recordId
 				structures[recordId] = keys
-				if (sharedStructures && sharedStructures.length <= maxSharedStructures) {
+				if (recordId < maxSharedStructures) {
 					target[position++] = 0xd9
 					target[position++] = (recordId >> 8) | 0xe0
 					target[position++] = recordId & 0xff
+					transition[RECORD_SYMBOL] = recordId | 0x100000 // indicates it is a extendable terminal
 					hasSharedUpdate = true
 				} else {
+					transition[RECORD_SYMBOL] = recordId
 					targetView.setUint32(position, 0xd9dfff00) // tag two byte, then record definition id
 					position += 3
 					if (newTransitions)
@@ -669,7 +647,7 @@ export class Encoder extends Decoder {
 					encode(0xe000 + recordId)
 					encode(keys)
 					// now write the values
-					for (let i =0; i < length; i++)
+					for (let i = 0; i < length; i++)
 						encode(object[keys[i]])
 					return
 				}
@@ -720,15 +698,18 @@ export class Encoder extends Decoder {
 	updateSharedData() {
 		let lastVersion = this.sharedVersion || 0
 		this.sharedVersion = lastVersion + 1
-		let saveResults = this.saveShared(new SharedData(this.structures, this.sharedValues, this.sharedVersion),
+		let sharedData = new SharedData(this.structures.slice(0), this.sharedValues, this.sharedVersion)
+		let saveResults = this.saveShared(sharedData,
 				existingShared => (existingShared && existingShared.version || 0) == lastVersion)
 		if (saveResults === false) {
 			// get updated structures and try again if the update failed
-			let sharedData = this.getShared() || {}
-			this.structures = sharedData.structures || []
-			this.sharedValues = sharedData.packedValues
-			this.sharedVersion = sharedData.version
+			sharedData = this.getShared() || {}
 		}
+		// saveShared may fail to write and reload, or may have reloaded to check compatibility and overwrite saved data, either way load the correct shared data
+		this.structures = sharedData.structures || []
+		this.sharedValues = sharedData.packedValues
+		this.sharedVersion = sharedData.version
+		this.structures.nextId = this.structures.length
 		return saveResults
 	}
 }

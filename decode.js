@@ -382,12 +382,21 @@ function createStructureReader(structure) {
 			}
 		}
 		// This initial function is quick to instantiate, but runs slower. After several iterations pay the cost to build the faster function
-		if (this.objectLiteralSize === length) // we have a fast object literal reader, use it (assuming it is the right length)
-			return this.objectLiteral(read)
-		if (this.count++ == 3) { // create a fast reader
-			this.objectLiteralSize = length
-			this.objectLiteral = new Function('r', 'return {' + this.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
-			return this.objectLiteral(read)
+		let compiledReader = this.compiledReader // first look to see if we have the fast compiled function
+		while(compiledReader) {
+			// we have a fast compiled object literal reader
+			if (compiledReader.propertyCount === length)
+				return compiledReader(read) // with the right length, so we use it
+			compiledReader = compiledReader.next // see if there is another reader with the right length
+		}
+		if (this.slowReads++ >= 3) { // create a fast compiled reader
+			let array = this.length == length ? this : this.slice(0, length)
+			compiledReader = new Function('r', 'return {' + array.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
+			if (this.compiledReader)
+				compiledReader.next = this.compiledReader // if there is an existing one, we store multiple readers as a linked list because it is usually pretty rare to have multiple readers (of different length) for the same structure
+			compiledReader.propertyCount = length
+			this.compiledReader = compiledReader
+			return compiledReader(read)
 		}
 		let object = {}
 		for (let i = 0; i < length; i++) {
@@ -396,7 +405,7 @@ function createStructureReader(structure) {
 		}
 		return object
 	}
-	structure.count = 0
+	structure.slowReads = 0
 	return readObject
 }
 
@@ -785,11 +794,16 @@ currentExtensions[5] = (fraction) => {
 	return fraction[1] * Math.exp(fraction[0] * Math.log(2))
 }
 
-// the registration of the record definition extension (tag 105)
+// the registration of the record definition extension
 const recordDefinition = (definition) => {
 	let id = definition[0] - 0xe000
 	let structure = definition[1]
+	let existingStructure = currentStructures[id]
+	if (existingStructure && existingStructure.isShared) {
+		(currentStructures.restoreStructures || (currentStructures.restoreStructures = []))[id] = existingStructure
+	}
 	currentStructures[id] = structure
+
 	structure.read = createStructureReader(structure)
 	let object = {}
 	for (let i = 2,l = definition.length; i < l; i++) {

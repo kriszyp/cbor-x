@@ -63,7 +63,7 @@ suite('CBOR basic tests', function(){
 		assert.deepEqual(deserialized, data)
 	})
 
-	test('mixed structures', function(){
+	test('mixed structures, shared', function(){
 		let data1 = { a: 1, b: 2, c: 3 }
 		let data2 = { a: 1, b: 2, d: 4 }
 		let data3 = { a: 1, b: 2, e: 5 }
@@ -78,6 +78,20 @@ suite('CBOR basic tests', function(){
 		var serialized = encoder.encode(data3)
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data3)
+	})
+
+	test('mixed structures, unshared', function(){
+		let data = []
+		let encoder = new Encoder({ })
+		for (let i = 0; i< 1000; i++) {
+			data.push({a: 1, ['test' + i]: i})
+		}
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
+		serialized = encoder.encode(data)
+		deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
 	})
 
 	test('mixed array', function(){
