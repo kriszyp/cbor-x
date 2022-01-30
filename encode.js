@@ -130,14 +130,14 @@ export class Encoder extends Decoder {
 							continue
 						let nextTransition, transition = sharedStructures.transitions
 						for (let j = 0, l = keys.length; j < l; j++) {
+							if (transition[RECORD_SYMBOL] === undefined)
+								transition[RECORD_SYMBOL] = i
 							let key = keys[j]
 							nextTransition = transition[key]
 							if (!nextTransition) {
 								nextTransition = transition[key] = Object.create(null)
 							}
 							transition = nextTransition
-							if (transition[RECORD_SYMBOL] === undefined)
-								transition[RECORD_SYMBOL] = i
 						}
 						transition[RECORD_SYMBOL] = i | 0x100000
 					}
@@ -674,18 +674,18 @@ export class Encoder extends Decoder {
 					}
 				} else {
 					recordId = parentRecordId
-					transition = structures.transitions
-					for (let i = 0; i < length; i++) {
-						transition = transition[keys[i]]
-						if (transition[RECORD_SYMBOL] === undefined)
-							transition[RECORD_SYMBOL] = recordId
-					}
 				}
 				structures[recordId] = keys
 				if (recordId < maxSharedStructures) {
 					target[position++] = 0xd9
 					target[position++] = (recordId >> 8) | 0xe0
 					target[position++] = recordId & 0xff
+					transition = structures.transitions
+					for (let i = 0; i < length; i++) {
+						if (transition[RECORD_SYMBOL] === undefined || (transition[RECORD_SYMBOL] & 0x100000))
+							transition[RECORD_SYMBOL] = recordId
+						transition = transition[keys[i]]
+					}
 					transition[RECORD_SYMBOL] = recordId | 0x100000 // indicates it is a extendable terminal
 					hasSharedUpdate = true
 				} else {
@@ -751,18 +751,22 @@ export class Encoder extends Decoder {
 	updateSharedData() {
 		let lastVersion = this.sharedVersion || 0
 		this.sharedVersion = lastVersion + 1
-		let sharedData = new SharedData(this.structures.slice(0), this.sharedValues, this.sharedVersion)
+		let structuresCopy = this.structures.slice(0)
+		let sharedData = new SharedData(structuresCopy, this.sharedValues, this.sharedVersion)
 		let saveResults = this.saveShared(sharedData,
 				existingShared => (existingShared && existingShared.version || 0) == lastVersion)
 		if (saveResults === false) {
 			// get updated structures and try again if the update failed
 			sharedData = this.getShared() || {}
+			this.structures = sharedData.structures || []
+			this.sharedValues = sharedData.packedValues
+			this.sharedVersion = sharedData.version
+			this.structures.nextId = this.structures.length
+		} else {
+			// restore structures
+			structuresCopy.forEach((structure, i) => this.structures[i] = structure)
 		}
 		// saveShared may fail to write and reload, or may have reloaded to check compatibility and overwrite saved data, either way load the correct shared data
-		this.structures = sharedData.structures || []
-		this.sharedValues = sharedData.packedValues
-		this.sharedVersion = sharedData.version
-		this.structures.nextId = this.structures.length
 		return saveResults
 	}
 }

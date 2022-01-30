@@ -50,7 +50,7 @@ console.log(rpad("", COL1, "-"), "|", lpad(":", COL2, "-"), "|", lpad(":", COL3,
 var buf, obj;
 
 if (cborX) {
-  var encoder = new cborX.Encoder({  })
+  var encoder = new cborX.Encoder({ structures: [] })
   buf = bench('cbor-x w/ records: encoder.encode(obj);', encoder.encode.bind(encoder), data);
   console.log('size', buf.length)
 
