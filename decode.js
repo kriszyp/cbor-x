@@ -254,7 +254,11 @@ export function read() {
 					position += 8
 					return value
 				}
-				if (currentDecoder.int64AsNumber) {
+				if (majorType > 1) {
+					if (dataView.getUint32(position) > 0)
+						throw new Error('JavaScript does not support arrays, maps, or strings with length over 4294967295')
+					token = dataView.getUint32(position + 4)
+				} else if (currentDecoder.int64AsNumber) {
 					token = dataView.getUint32(position) * 0x100000000
 					token += dataView.getUint32(position + 4)
 				} else
