@@ -230,6 +230,16 @@ suite('CBOR basic tests', function(){
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
+	test('pack/unpack sample data with self-descriptive header', function(){
+		var data = sampleData
+		let encoder = new Encoder({ useSelfDescribedHeader: true })
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(deserialized, data)
+		assert.equal(serialized[0], 0xd9)
+		assert.equal(serialized[1], 0xd9)
+		assert.equal(serialized[2], 0xf7)
+	})
 	if (typeof Buffer != 'undefined')
 	test('replace data', function(){
 		var data1 = {

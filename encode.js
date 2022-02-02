@@ -97,6 +97,10 @@ export class Encoder extends Decoder {
 			} else if (encodeOptions === REUSE_BUFFER_MODE)
 				position = (position + 7) & 0x7ffffff8 // Word align to make any future copying of this buffer faster
 			start = position
+			if (encoder.useSelfDescribedHeader) {
+				targetView.setUint32(position, 0xd9d9f700) // tag two byte, then self-descriptive tag
+				position += 3
+			}
 			referenceMap = encoder.structuredClone ? new Map() : null
 			if (encoder.bundleStrings && typeof value !== 'string') {
 				bundledStrings = []

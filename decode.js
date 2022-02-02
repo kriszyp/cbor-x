@@ -1003,6 +1003,8 @@ currentExtensionRanges.push((tag, input) => {
 			version: input,
 		}
 	}
+	if (tag == 55799) // self-descriptive CBOR tag, just return input value
+		return input
 })
 
 export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')
