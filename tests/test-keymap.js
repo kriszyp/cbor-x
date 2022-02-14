@@ -63,7 +63,7 @@ function compare(label, r1, r2) {
   console.log(`  Decode: ${pct(r2.decAvg, r1.decAvg)}% \t(${r1.decAvg})`)
 }
 
-function test(data, opts, preMap, its=1000) { 
+function test(data, opts, preMap, its=10) { 
   let cbor = new Encoder(opts)
   let decode = (b) => preMap ? preMapDecode(cbor.decode(b)) : cbor.mapDecode(b)
   let encode = (d) => preMap ? cbor.encode(preMapEncode(d)) : cbor.mapEncode(d)
