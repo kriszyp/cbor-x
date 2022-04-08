@@ -912,8 +912,8 @@ extensions = [{
 	typedArrayEncoder(77),
 	typedArrayEncoder(78),
 	typedArrayEncoder(79),
-	typedArrayEncoder(81),
-	typedArrayEncoder(82),
+	typedArrayEncoder(85),
+	typedArrayEncoder(86),
 {
 	encode(sharedData, encode) { // write SharedData
 		let packedValues = sharedData.packedValues || []

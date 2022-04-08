@@ -1008,7 +1008,7 @@ currentExtensionRanges.push((tag, input) => {
 })
 
 export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')
-const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 81, 82]
+const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 85, 86]
 for (let i = 0; i < typedArrays.length; i++) {
 	registerTypedArray(typedArrays[i], typedArrayTags[i])
 }
