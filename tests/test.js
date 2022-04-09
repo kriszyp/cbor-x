@@ -353,6 +353,7 @@ suite('CBOR basic tests', function(){
 		let fa = new Float32Array(b.buffer, 8, 2)
 		fa[0] = 2.25
 		fa[1] = 6
+		let f64a = new Float64Array([2.3, 4.7])
 		let map = new Map()
 		map.set('key', 'value')
 		let object = {
@@ -361,6 +362,7 @@ suite('CBOR basic tests', function(){
 			regexp: /test/gi,
 			map,
 			float32Array: fa,
+			float64Array: f64a,
 			uint16Array: new Uint16Array([3,4])
 		}
 		let encoder = new Encoder({
@@ -375,6 +377,8 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.float32Array.constructor.name, 'Float32Array')
 		assert.equal(deserialized.float32Array[0], 2.25)
 		assert.equal(deserialized.float32Array[1], 6)
+		assert.equal(deserialized.float64Array[0], 2.3)
+		assert.equal(deserialized.float64Array[1], 4.7)
 		assert.equal(deserialized.uint16Array.constructor.name, 'Uint16Array')
 		assert.equal(deserialized.uint16Array[0], 3)
 		assert.equal(deserialized.uint16Array[1], 4)

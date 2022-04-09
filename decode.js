@@ -1007,17 +1007,36 @@ currentExtensionRanges.push((tag, input) => {
 		return input
 })
 
-export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64'].map(type => type + 'Array')
+const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
+export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64']
 const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 85, 86]
 for (let i = 0; i < typedArrays.length; i++) {
 	registerTypedArray(typedArrays[i], typedArrayTags[i])
 }
-function registerTypedArray(typedArrayName, tag) {
-	currentExtensions[tag] = (buffer) => {
-		if (!typedArrayName)
-			throw new Error('Could not find typed array for code ' + typeCode)
-		// we have to always slice/copy here to get a new ArrayBuffer that is word/byte aligned
-		return new glbl[typedArrayName](Uint8Array.prototype.slice.call(buffer, 0).buffer)
+function registerTypedArray(typedArrayId, tag, littleEndian) {
+	let TypedArray = glbl[typedArrayId + 'Array']
+	let bytesPerElement = TypedArray.BYTES_PER_ELEMENT
+	for (let littleEndian = 0; littleEndian < 2; littleEndian++) {
+		if (!littleEndian && bytesPerElement == 1)
+			continue
+		let sizeShift = bytesPerElement == 2 ? 1 : bytesPerElement == 4 ? 2 : 3
+		currentExtensions[littleEndian ? tag : (tag - 4)] = (bytesPerElement == 1 || littleEndian == isLittleEndianMachine) ? (buffer) => {
+			if (!TypedArray)
+				throw new Error('Could not find typed array for code ' + tag)
+			// we have to always slice/copy here to get a new ArrayBuffer that is word/byte aligned
+			return new TypedArray(Uint8Array.prototype.slice.call(buffer, 0).buffer)
+		} : buffer => {
+			if (!TypedArray)
+				throw new Error('Could not find typed array for code ' + tag)
+			let dv = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+			let elements = buffer.length >> sizeShift
+			let ta = new TypedArray(elements)
+			let method = dv['get' + typedArrayId]
+			for (let i = 0; i < elements; i++) {
+				ta[i] = method.call(dv, i << sizeShift, littleEndian)
+			}
+			return ta
+		}
 	}
 }
 

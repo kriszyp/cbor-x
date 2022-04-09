@@ -848,7 +848,7 @@ function findRepetitiveStrings(value, packedValues) {
 		case 'function': console.log(value)
 	}
 }
-
+const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
 extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer, ByteArray,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
@@ -903,17 +903,17 @@ extensions = [{
 	encode(arrayBuffer, encode, makeRoom) {
 		writeBuffer(arrayBuffer, makeRoom)
 	}
-}, typedArrayEncoder(64),
-	typedArrayEncoder(68),
-	typedArrayEncoder(69),
-	typedArrayEncoder(70),
-	typedArrayEncoder(71),
-	typedArrayEncoder(72),
-	typedArrayEncoder(77),
-	typedArrayEncoder(78),
-	typedArrayEncoder(79),
-	typedArrayEncoder(85),
-	typedArrayEncoder(86),
+}, typedArrayEncoder(64, 1),
+	typedArrayEncoder(68, 1),
+	typedArrayEncoder(69, 2),
+	typedArrayEncoder(70, 4),
+	typedArrayEncoder(71, 8),
+	typedArrayEncoder(72, 1),
+	typedArrayEncoder(77, 2),
+	typedArrayEncoder(78, 4),
+	typedArrayEncoder(79, 8),
+	typedArrayEncoder(85, 4),
+	typedArrayEncoder(86, 8),
 {
 	encode(sharedData, encode) { // write SharedData
 		let packedValues = sharedData.packedValues || []
@@ -942,8 +942,9 @@ extensions = [{
 			encode(new Tag(sharedData.version, 0x53687264))
 		}
 	}]
-
-function typedArrayEncoder(tag) {
+function typedArrayEncoder(tag, size) {
+	if (!isLittleEndianMachine && size > 1)
+		tag -= 4 // the big endian equivalents are 4 less
 	return {
 		tag: tag,
 		encode: function writeExtBuffer(typedArray, encode) {
