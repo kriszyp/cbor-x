@@ -514,7 +514,9 @@ export class Encoder extends Decoder {
 							let extensionClass = extensionClasses[i]
 							if (value instanceof extensionClass) {
 								let extension = extensions[i]
-								let tag = extension.tag || extension.getTag && extension.getTag(value)
+								let tag = extension.tag
+								if (tag == undefined)
+									tag = extension.getTag && extension.getTag(value)
 								if (tag < 0x18) {
 									target[position++] = 0xc0 | tag
 								} else if (tag < 0x100) {

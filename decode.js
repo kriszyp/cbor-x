@@ -824,7 +824,7 @@ currentExtensions[0] = (dateString) => {
 
 currentExtensions[1] = (epochSec) => {
 	// numeric date extension
-	return new Date(epochSec * 1000)
+	return new Date(Math.round(epochSec * 1000))
 }
 
 currentExtensions[2] = (buffer) => {

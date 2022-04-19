@@ -438,13 +438,16 @@ suite('CBOR basic tests', function(){
 		var map = new Map()
 		map.set(4, 'four')
 		map.set('three', 3)
-
+		let year2039 = new Date('2039-07-05T16:22:35.792Z')
+		let year2038 = new Date('2038-08-06T00:19:02.911Z')
 
 		var data = {
 			map: map,
 			date: new Date(1532219539733),
 			farFutureDate: new Date(3532219539133),
 			ancient: new Date(-3532219539133),
+			year2038,
+			year2039,
 			invalidDate: new Date('invalid')
 		}
 		let encoder = new Encoder()
@@ -455,6 +458,8 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.date.getTime(), 1532219539733)
 		assert.equal(deserialized.farFutureDate.getTime(), 3532219539133)
 		assert.equal(deserialized.ancient.getTime(), -3532219539133)
+		assert.equal(deserialized.year2038.getTime(), year2038.getTime())
+		assert.equal(deserialized.year2039.getTime(), year2039.getTime())
 		assert.equal(deserialized.invalidDate.toString(), 'Invalid Date')
 	})
 	test('map/date with options', function(){
