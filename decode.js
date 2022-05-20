@@ -1015,6 +1015,9 @@ for (let i = 0; i < typedArrays.length; i++) {
 }
 function registerTypedArray(typedArrayId, tag, littleEndian) {
 	let TypedArray = glbl[typedArrayId + 'Array']
+	if (!TypedArray) {
+		return
+	}
 	let bytesPerElement = TypedArray.BYTES_PER_ELEMENT
 	for (let littleEndian = 0; littleEndian < 2; littleEndian++) {
 		if (!littleEndian && bytesPerElement == 1)
