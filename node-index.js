@@ -7,16 +7,18 @@ export const mapsAsObjects = true
 import { setExtractor } from './decode.js'
 import { createRequire } from 'module'
 
-const extractor = tryRequire('cbor-extract')
-if (extractor)
-	setExtractor(extractor.extractStrings)
+const nativeAccelerationDisabled = process.env.CBOR_NATIVE_ACCELERATION_DISABLED !== undefined && process.env.CBOR_NATIVE_ACCELERATION_DISABLED.toLowerCase() === 'true';
 
-function tryRequire(moduleId) {
+if (!nativeAccelerationDisabled) {
+	let extractor
 	try {
-		let require = createRequire(import.meta.url)
-		return require(moduleId)
+		if (typeof require == 'function')
+			extractor = require('cbor-extract')
+		else
+			extractor = createRequire(import.meta.url)('cbor-extract')
+		if (extractor)
+			setExtractor(extractor.extractStrings)
 	} catch (error) {
-		if (typeof window != 'undefined')
-			console.warn('For browser usage, directly use cbor-x/decode or cbor-x/encode modules. ' + error.message.split('\n')[0])
+		// native module is optional
 	}
 }
