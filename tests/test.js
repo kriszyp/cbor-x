@@ -1,6 +1,7 @@
 import * as CBOR from '../index.js'
 import chai from 'chai'
-import sampleData from './example4.json'
+import { readFileSync } from 'fs'
+const sampleData = JSON.parse(readFileSync(new URL('./example4.json', import.meta.url)))
 
 const senmlData = [ 
 	{ bn: '/3303/0/5700', bt: 1278887, v: 35.5 },
