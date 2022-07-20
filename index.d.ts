@@ -1,5 +1,6 @@
-export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource, roundFloat32, isNativeAccelerationEnabled } from './decode.js'
-export { Encoder, encode } from './encode.js'
+import { Options } from './decode'
+export { Decoder, decode, addExtension, FLOAT32_OPTIONS, clearSource, roundFloat32, isNativeAccelerationEnabled } from './decode'
+export { Encoder, encode } from './encode'
 import { Transform, Readable } from 'stream'
 
 export as namespace CBOR;
