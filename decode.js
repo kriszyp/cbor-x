@@ -189,8 +189,15 @@ export function getPosition() {
 export function checkedRead() {
 	try {
 		let result = read()
-		if (bundledStrings) // bundled strings to skip past
-			position = bundledStrings.postBundlePosition
+		if (bundledStrings) {
+			if (position - bundledStrings.postBundlePosition >= 0) {
+				let error = new Error('Need more data to resolve bundle string');
+				error.incomplete = true;
+				throw error
+			}
+			// bundled strings to skip past
+			position = bundledStrings.postBundlePosition;
+		}
 
 		if (position == srcEnd) {
 			// finished reading this source, cleanup references
