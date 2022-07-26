@@ -190,8 +190,8 @@ export function checkedRead() {
 	try {
 		let result = read()
 		if (bundledStrings) {
-			if (position - bundledStrings.postBundlePosition >= 0) {
-				let error = new Error('Need more data to resolve bundle string');
+			if (position >= bundledStrings.postBundlePosition) {
+				let error = new Error('Unexpected bundle position');
 				error.incomplete = true;
 				throw error
 			}
