@@ -50,7 +50,7 @@ suite('cbor-x node stream tests', function(){
 		bufferStream.push(new Uint8Array([1, 2]))
 		bufferStream.push(null)
 	}))
-	test.only('stream to/from file', () => {
+	test('stream to/from file', (done) => {
 		const recordNum = 10000
 
 		const enc = new EncoderStream({
@@ -68,7 +68,7 @@ suite('cbor-x node stream tests', function(){
 		    .on('data', (c) => console.log(c.length))
 		    .pipe(dec)
 		    .on('data', () => {})
-		    .on('end', () => console.timeEnd('READ'))
+		    .on('end', () => console.timeEnd('READ') || done())
 
 		}
 
