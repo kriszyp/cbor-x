@@ -50,10 +50,47 @@ suite('cbor-x node stream tests', function(){
 		bufferStream.push(new Uint8Array([1, 2]))
 		bufferStream.push(null)
 	}))
+	test.only('stream to/from file', () => {
+		const recordNum = 10000
+
+		const enc = new EncoderStream({
+		  bundleStrings: true,
+		})
+
+		const read = () => {
+		  console.time('READ')
+
+		  const dec = new DecoderStream({
+		    bundleStrings: true,
+		  })
+
+		  fs.createReadStream('test.cbor')
+		    .on('data', (c) => console.log(c.length))
+		    .pipe(dec)
+		    .on('data', () => {})
+		    .on('end', () => console.timeEnd('READ'))
+
+		}
+
+		enc.pipe(fs.createWriteStream('test.cbor'))
+		enc.on('end', () => console.timeEnd('GEN') || read())
+
+		console.log('Generating')
+
+		console.time('GEN')
+
+		const curr = Date.now()
+
+		for (let i = 0; i < recordNum; ++i) {
+		  enc.write({ i, str: 'TEST_STR', ts: Date.now() })
+		}
+
+		enc.end()
+	})
 
 	teardown(function() {
 		try {
-			fs.unlinkSync('test-output.msgpack')
+			fs.unlinkSync('test.cbor')
 		}catch(error){}
 	})
 })
