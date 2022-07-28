@@ -50,7 +50,8 @@
       "default": {
         "import": "./decode.js"
       }
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "/dist",
