@@ -855,7 +855,7 @@ extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer, ByteArray,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
-	Float32Array, Float64Array, SharedData]
+	Float32Array, Float64Array, SharedData ]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
 extensions = [{

@@ -822,8 +822,6 @@ export class Tag {
 	}
 }
 
-let glbl = typeof self == 'object' ? self : global
-
 currentExtensions[0] = (dateString) => {
 	// string date extension
 	return new Date(dateString)
@@ -890,7 +888,7 @@ currentExtensions[15] = (value) => {
 		return bundledStrings[1].slice(bundledStrings.position1, bundledStrings.position1 += value)
 	return new Tag(value, 15)
 }
-
+let glbl = { Error, RegExp }
 currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
@@ -1015,13 +1013,17 @@ currentExtensionRanges.push((tag, input) => {
 })
 
 const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
-export const typedArrays = ['Uint8', 'Uint8Clamped', 'Uint16', 'Uint32', 'BigUint64','Int8', 'Int16', 'Int32', 'BigInt64', 'Float32', 'Float64']
+export const typedArrays = [Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
+	typeof BigUint64Array == 'undefined' ? { name:'BigUint64Array' } : BigUint64Array, Int8Array, Int16Array, Int32Array,
+	typeof BigInt64Array == 'undefined' ? { name:'BigInt64Array' } : BigInt64Array, Float32Array, Float64Array]
 const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 85, 86]
 for (let i = 0; i < typedArrays.length; i++) {
 	registerTypedArray(typedArrays[i], typedArrayTags[i])
 }
-function registerTypedArray(typedArrayId, tag, littleEndian) {
-	let TypedArray = glbl[typedArrayId + 'Array']
+function registerTypedArray(TypedArray, tag) {
+	let dvMethod = 'get' + TypedArray.name.slice(0, -5)
+	if (typeof TypedArray !== 'function')
+		TypedArray = null;
 	let bytesPerElement = TypedArray.BYTES_PER_ELEMENT
 	for (let littleEndian = 0; littleEndian < 2; littleEndian++) {
 		if (!littleEndian && bytesPerElement == 1)
@@ -1038,7 +1040,7 @@ function registerTypedArray(typedArrayId, tag, littleEndian) {
 			let dv = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
 			let elements = buffer.length >> sizeShift
 			let ta = new TypedArray(elements)
-			let method = dv['get' + typedArrayId]
+			let method = dv[dvMethod]
 			for (let i = 0; i < elements; i++) {
 				ta[i] = method.call(dv, i << sizeShift, littleEndian)
 			}
