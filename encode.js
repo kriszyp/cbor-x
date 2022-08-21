@@ -977,7 +977,9 @@ function writeBuffer(buffer, makeRoom) {
 	if (position + length >= target.length) {
 		makeRoom(position + length)
 	}
-	target.set(buffer, position)
+	// if it is already a typed array (has an ArrayBuffer), use that, but if it is an ArrayBuffer itself,
+	// must wrap it to set it.
+	target.set(buffer.buffer ? buffer : new Uint8Array(buffer), position)
 	position += length
 }
 

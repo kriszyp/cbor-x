@@ -46,7 +46,6 @@ try {
 var ITERATIONS = 4000
 
 suite('CBOR basic tests', function(){
-
 	test('encode/decode with keyMaps (basic)', function() {
 		var data = senmlData
 		let cborSenml = new Encoder({ useRecords: false, keyMap: senmlKeys })
@@ -563,6 +562,16 @@ suite('CBOR basic tests', function(){
 		var serialized = encode(data)
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
+	})
+
+	test('encode ArrayBuffer', function() {
+		let ua = new Uint8Array([3, 4, 5]);
+		let encoded = encode(ua.buffer);
+		let decoded = decode(encoded);
+		assert.equal(decoded[0], 3);
+		assert.equal(decoded[1], 4);
+		assert.equal(decoded[2], 5);
+		assert.equal(decoded.byteLength, 3);
 	})
 
 	test('iterator/indefinite length array', function(){
