@@ -25,6 +25,7 @@ export interface Options {
 	getStructures?(): {}[]
 	saveStructures?(structures: {}[]): boolean | void
 	onInvalidDate?: () => any
+	tagUint8Array?: boolean
 }
 interface Extension {
 	Class: Function
