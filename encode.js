@@ -516,7 +516,7 @@ export class Encoder extends Decoder {
 								let extension = extensions[i]
 								let tag = extension.tag
 								if (tag == undefined)
-									tag = extension.getTag && extension.getTag(value)
+									tag = extension.getTag && extension.getTag.call(this, value)
 								if (tag < 0x18) {
 									target[position++] = 0xc0 | tag
 								} else if (tag < 0x100) {
@@ -851,14 +851,14 @@ function findRepetitiveStrings(value, packedValues) {
 	}
 }
 const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
-extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer, ByteArray,
+extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
 	Float32Array, Float64Array, SharedData ]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
-extensions = [{
+extensions = [{ // Date
 	tag: 1,
 	encode(date, encode) {
 		let seconds = date.getTime() / 1000
@@ -874,38 +874,44 @@ extensions = [{
 			position += 8
 		}
 	}
-}, {
+}, { // Set
 	tag: 258, // https://github.com/input-output-hk/cbor-sets-spec/blob/master/CBOR_SETS.md
 	encode(set, encode) {
 		let array = Array.from(set)
 		encode(array)
 	}
-}, {
+}, { // Error
 	tag: 27, // http://cbor.schmorp.de/generic-object
 	encode(error, encode) {
 		encode([ error.name, error.message ])
 	}
-}, {
+}, { // RegExp
 	tag: 27, // http://cbor.schmorp.de/generic-object
 	encode(regex, encode) {
 		encode([ 'RegExp', regex.source, regex.flags ])
 	}
-}, {
+}, { // Tag
 	getTag(tag) {
 		return tag.tag
 	},
 	encode(tag, encode) {
 		encode(tag.value)
 	}
-}, {
+}, { // ArrayBuffer
 	encode(arrayBuffer, encode, makeRoom) {
 		writeBuffer(arrayBuffer, makeRoom)
 	}
-}, {
-	encode(arrayBuffer, encode, makeRoom) {
-		writeBuffer(arrayBuffer, makeRoom)
+}, { // Uint8Array
+	getTag(typedArray) {
+		if (typedArray.constructor === Uint8Array) {
+			if (this.tagUint8Array || hasNodeBuffer && this.tagUint8Array !== false)
+				return 64;
+		} // else no tag
+	},
+	encode(typedArray, encode, makeRoom) {
+		writeBuffer(typedArray, makeRoom)
 	}
-}, typedArrayEncoder(64, 1),
+},
 	typedArrayEncoder(68, 1),
 	typedArrayEncoder(69, 2),
 	typedArrayEncoder(70, 4),

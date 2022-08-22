@@ -569,6 +569,7 @@ suite('CBOR basic tests', function(){
 		let encoded = encode(ua.buffer);
 		let decoded = decode(encoded);
 		assert.equal(decoded[0], 3);
+		assert.equal(decoded[0], 3);
 		assert.equal(decoded[1], 4);
 		assert.equal(decoded[2], 5);
 		assert.equal(decoded.byteLength, 3);
@@ -614,6 +615,12 @@ suite('CBOR basic tests', function(){
 		var serialized = encode(data)
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
+		let encoder = new Encoder({ tagUint8Array: true })
+		serialized = encoder.encode(new Uint8Array([2,3,4]))
+		assert.equal(serialized[0], 0xd8);
+		encoder = new Encoder({ tagUint8Array: false })
+		serialized = encoder.encode(new Uint8Array([2,3,4]))
+		assert.equal(serialized[0], 0x43);
 	})
 
 	test('noteencode test', function() {
