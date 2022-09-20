@@ -737,18 +737,30 @@ function readExt(length) {
 	else
 		throw new Error('Unknown extension type ' + type)
 }
-
+let f32Array = new Float32Array(1)
+let u8Array = new Uint8Array(f32Array.buffer, 0, 4)
 function getFloat16() {
 	let byte0 = src[position++]
 	let byte1 = src[position++]
-	let half = (byte0 << 8) + byte1
-	let exp = (half >> 10) & 0x1f
-	let mant = half & 0x3ff
-	let val
-	if (exp == 0) val = Math.exp(mant, -24)
-	else if (exp != 31) val = Math.exp(mant + 1024, exp - 25)
-	else val = mant == 0 ? Infinity : NaN
-	return half & 0x8000 ? -val : val
+	let exponent = (byte0 & 0x7f) >> 2;
+	if (exponent === 0x31) { // specials
+		if (byte1)
+			return NaN;
+		return (byte0 & 0x80) ? -Infinity : Infinity;
+	}
+	if (exponent === 0) { // sub-normals
+		// significand with 10 fractional bits and divided by 2^14
+		let abs = (((byte0 & 3) << 8) | byte1) / (1 << 24)
+		return (byte0 & 0x80) ? -abs : abs
+	}
+
+	u8Array[3] = (byte0 & 0x80) | // sign bit
+		((exponent >> 1) + 56) // 4 of 5 of the exponent bits, re-offset-ed
+	u8Array[2] = ((byte0 & 7) << 5) | // last exponent bit and first two mantissa bits
+		(byte1 >> 3) // next 5 bits of mantissa
+	u8Array[1] = byte1 << 5; // last three bits of mantissa
+	u8Array[0] = 0;
+	return f32Array[0];
 }
 
 let keyCache = new Array(4096)
@@ -1160,8 +1172,6 @@ export const FLOAT32_OPTIONS = {
 	DECIMAL_ROUND: 3,
 	DECIMAL_FIT: 4
 }
-let f32Array = new Float32Array(1)
-let u8Array = new Uint8Array(f32Array.buffer, 0, 4)
 export function roundFloat32(float32Number) {
 	f32Array[0] = float32Number
 	let multiplier = mult10[((u8Array[3] & 0x7f) << 1) | (u8Array[2] >> 7)]

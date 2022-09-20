@@ -348,6 +348,11 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.children, deserialized.childrenAgain)
 	})
 
+	test('decode float 16', function() {
+		assert.equal(decode(new Uint8Array([0xF9, 0x4A, 0x60])), 12.75);
+		assert.equal(decode(new Uint8Array([0xF9, 0xC4, 0x80])), -4.5);
+		assert.equal(decode(new Uint8Array([0xF9, 0x5A, 0xF9])), 223.125);
+	});
 	test('structured cloning: types', function() {
 		let b = typeof Buffer != 'undefined' ? Buffer.alloc(20) : new Uint8Array(20)
 		let fa = new Float32Array(b.buffer, 8, 2)
