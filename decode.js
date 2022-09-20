@@ -743,8 +743,8 @@ function getFloat16() {
 	let byte0 = src[position++]
 	let byte1 = src[position++]
 	let exponent = (byte0 & 0x7f) >> 2;
-	if (exponent === 0x31) { // specials
-		if (byte1)
+	if (exponent === 0x1f) { // specials
+		if (byte1 || (byte0 & 3))
 			return NaN;
 		return (byte0 & 0x80) ? -Infinity : Infinity;
 	}
