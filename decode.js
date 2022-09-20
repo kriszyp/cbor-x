@@ -84,7 +84,7 @@ export class Decoder {
 		}
 		let res = {}
 		//map.forEach((v,k) => res[Object.keys(this._keyMap)[Object.values(this._keyMap).indexOf(k)] || k] = v)
-		map.forEach((v,k) => res[this._mapKey.has(k) ? this._mapKey.get(k) : k] =  v)
+		map.forEach((v,k) => res[safeKey(this._mapKey.has(k) ? this._mapKey.get(k) : k)] =  v)
 		return res
 	}
 	
@@ -289,8 +289,8 @@ export function read() {
 						let key
 						if (currentDecoder.mapsAsObjects) {
 							let object = {}
-							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) object[currentDecoder.decodeKey(key)] = read()
-							else while ((key = read()) != STOP_CODE) object[key] = read()
+							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) object[safeKey(currentDecoder.decodeKey(key))] = read()
+							else while ((key = read()) != STOP_CODE) object[safeKey(key)] = read()
 							return object
 						} else {
 							if (restoreMapsAsObject) {
@@ -338,8 +338,8 @@ export function read() {
 		case 5: // map
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
-				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[currentDecoder.decodeKey(read())] = read()
-				else for (let i = 0; i < token; i++) object[read()] = read()
+				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
+				else for (let i = 0; i < token; i++) object[safeKey(read())] = read()
 				return object
 			} else {
 				if (restoreMapsAsObject) {
@@ -455,8 +455,8 @@ function createStructureReader(structure) {
 		if (this.slowReads++ >= 3) { // create a fast compiled reader
 			let array = this.length == length ? this : this.slice(0, length)
 			compiledReader = currentDecoder.keyMap 
-			? new Function('r', 'return {' + array.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) ? k + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
-			: new Function('r', 'return {' + array.map(key => validName.test(key) ? key + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
+			? new Function('r', 'return {' + array.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) ? safeKey(k) + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
+			: new Function('r', 'return {' + array.map(key => validName.test(key) ? safeKey(key) + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
 			if (this.compiledReader)
 				compiledReader.next = this.compiledReader // if there is an existing one, we store multiple readers as a linked list because it is usually pretty rare to have multiple readers (of different length) for the same structure
 			compiledReader.propertyCount = length
@@ -464,12 +464,18 @@ function createStructureReader(structure) {
 			return compiledReader(read)
 		}
 		let object = {}
-		if (currentDecoder.keyMap) for (let i = 0; i < length; i++) object[currentDecoder.decodeKey(this[i])] = read()
-		else for (let i = 0; i < length; i++) object[this[i]] = read()
+		if (currentDecoder.keyMap) for (let i = 0; i < length; i++) object[safeKey(currentDecoder.decodeKey(this[i]))] = read()
+		else for (let i = 0; i < length; i++) {
+			object[safeKey(this[i])] = read();
+		}
 		return object
 	}
 	structure.slowReads = 0
 	return readObject
+}
+
+function safeKey(key) {
+	return key === '__proto__' ? '__proto_' : key
 }
 
 let readFixedString = readStringJS
@@ -881,11 +887,11 @@ const recordDefinition = (definition) => {
 	let object = {}
 	if (currentDecoder.keyMap) for (let i = 2,l = definition.length; i < l; i++) {
 			let key = currentDecoder.decodeKey(structure[i - 2])
-			object[key] = definition[i]
+			object[safeKey(key)] = definition[i]
 		}
 	else for (let i = 2,l = definition.length; i < l; i++) {
 			let key = structure[i - 2]
-			object[key] = definition[i]
+			object[safeKey(key)] = definition[i]
 		}
 	return object
 }
