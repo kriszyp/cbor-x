@@ -27,11 +27,12 @@ export interface Options {
 	onInvalidDate?: () => any
 	tagUint8Array?: boolean
 }
-interface Extension {
-	Class: Function
+type ClassOf<T> = new (...args: any[]) => T;
+interface Extension<T, R> {
+	Class: ClassOf<T>
 	tag: number
-	encode(value: any): Buffer | Uint8Array
-	decode(messagePack: Buffer | Uint8Array): any
+	encode(value: T, encodeFn: (data: R) => Uint8Array): Buffer | Uint8Array
+	decode(item: R): T
 }
 export class Decoder {
 	constructor(options?: Options)
@@ -40,7 +41,7 @@ export class Decoder {
 }
 export function decode(messagePack: Buffer | Uint8Array): any
 export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
-export function addExtension(extension: Extension): void
+export function addExtension<T, R>(extension: Extension<T, R>): void
 export function clearSource(): void
 export function roundFloat32(float32Number: number): number
 export let isNativeAccelerationEnabled: boolean
