@@ -309,6 +309,35 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.extendedInstance.getDouble(), 8)
 	})
 
+	test('addExtension with map', function(){
+		function Extended() {
+		}
+		var instance = new Extended()
+		instance.value = 4
+		instance.map = new Map();
+		instance.map.set('key', 'value');
+		var data = {
+			extendedInstance: instance,
+		}
+		let encoder = new Encoder()
+		addExtension({
+			Class: Extended,
+			tag: 301,
+			decode: function(data) {
+				let e = new Extended()
+				e.value = data[0]
+				e.map = data[1]
+				return e
+			},
+			encode: function(instance, encode) {
+				return encode([instance.value, instance.map])
+			}
+		})
+		var serialized = encoder.encode(data)
+		var deserialized = encoder.decode(serialized)
+		assert.deepEqual(data, deserialized)
+	})
+
 	test.skip('text decoder', function() {
 			let td = new TextDecoder('ISO-8859-15')
 			let b = Buffer.alloc(3)
