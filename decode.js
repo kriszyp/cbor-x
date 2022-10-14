@@ -197,6 +197,7 @@ export function checkedRead() {
 			}
 			// bundled strings to skip past
 			position = bundledStrings.postBundlePosition;
+			bundledStrings = null;
 		}
 
 		if (position == srcEnd) {
