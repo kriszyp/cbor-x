@@ -934,18 +934,23 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
 	throw new Error('No support for non-integer packed references yet')
 }
-currentExtensions[25] = (id) => {
-	return stringRefs[id]
-}
-currentExtensions[256] = (read) => {
-	stringRefs = []
-	try {
-		return read()
-	} finally {
-		stringRefs = null
-	}
-}
-currentExtensions[256].handlesRead = true
+
+// The following code is an incomplete implementation of http://cbor.schmorp.de/stringref
+// the real thing would need to implemennt more logic to populate the stringRefs table and
+// maintain a stack of stringRef "namespaces".
+//
+// currentExtensions[25] = (id) => {
+// 	return stringRefs[id]
+// }
+// currentExtensions[256] = (read) => {
+// 	stringRefs = []
+// 	try {
+// 		return read()
+// 	} finally {
+// 		stringRefs = null
+// 	}
+// }
+// currentExtensions[256].handlesRead = true
 
 currentExtensions[28] = (read) => { 
 	// shareable http://cbor.schmorp.de/value-sharing (for structured clones)
