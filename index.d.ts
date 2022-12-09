@@ -26,6 +26,7 @@ export interface Options {
 	saveStructures?(structures: {}[]): boolean | void
 	onInvalidDate?: () => any
 	tagUint8Array?: boolean
+	pack?: boolean
 }
 type ClassOf<T> = new (...args: any[]) => T;
 interface Extension<T, R> {
