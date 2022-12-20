@@ -759,25 +759,6 @@ export class Encoder extends Decoder {
 			return encoder.encode(value);
 		}
 		function* encodeObjectAsIterator(object, iterateProperties) {
-			if (object[Symbol.iterator]) {
-				yield new Uint8Array([0x9f]); // start indefinite array
-				for (let value of object) {
-					if (value && typeof value === 'object' && iterateProperties.element)
-						yield* encodeObjectAsIterator.call(this, value, iterateProperties.element);
-					else {
-						try {
-							yield this.encode(value, THROW_ON_ITERATOR);
-						} catch (error) {
-							if (error.iteratorNotHandled) {
-								yield* encodeObjectAsIterator.call(this, value, iterateProperties.element = {});
-							} else
-								throw error;
-						}
-					}
-				}
-				yield new Uint8Array([0xff]); // stop byte
-				return;
-			}
 			let constructor = object.constructor;
 			if (constructor === Object) {
 				yield encodeLength(Object.keys(object).length, 0xa0);
@@ -814,8 +795,28 @@ export class Encoder extends Decoder {
 						}
 					}
 				}
-			} else if (constructor === Blob || object[Symbol.asyncIterator]) {
-				yield object; // directly return blobs and async iterators, they have to be encoded asynchronously
+			} else if (object[Symbol.iterator]) {
+				yield new Uint8Array([0x9f]); // start indefinite array
+				for (let value of object) {
+					if (value && typeof value === 'object' && iterateProperties.element)
+						yield* encodeObjectAsIterator.call(this, value, iterateProperties.element);
+					else {
+						try {
+							yield this.encode(value, THROW_ON_ITERATOR);
+						} catch (error) {
+							if (error.iteratorNotHandled) {
+								yield* encodeObjectAsIterator.call(this, value, iterateProperties.element = {});
+							} else
+								throw error;
+						}
+					}
+				}
+				yield new Uint8Array([0xff]); // stop byte
+			} else if (constructor === Blob){
+				yield encodeLength(object.size, 0x40); // encode as binary data
+				yield object; // directly return blobs, they have to be encoded asynchronously
+			} else if (object[Symbol.asyncIterator]) {
+				yield object; // directly return async iterators, they have to be encoded asynchronously
 			} else {
 				yield this.encode(object);
 			}
@@ -826,7 +827,6 @@ export class Encoder extends Decoder {
 				if (constructor === Buffer || constructor === Uint8Array)
 					yield encodedValue;
 				else if (constructor === Blob) {
-					yield encodeLength(encodedValue.size, 0x40); // encode as binary data
 					let reader = encodedValue.stream().getReader();
 					let next;
 					while (!(next = await reader.read()).done) {
