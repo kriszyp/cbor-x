@@ -716,7 +716,6 @@ suite('CBOR basic tests', function(){
 		};
 		let encodedIterator = encodeAsIterator(hasIterators);
 		let result = [...encodedIterator];
-		assert(result.length > 10);
 		result = Buffer.concat(result);
 		let deserialized = decode(result);
 		const expectedResult = {
@@ -770,7 +769,29 @@ suite('CBOR basic tests', function(){
 		};
 		assert.deepEqual(deserialized, expectedResult);
 	});
-
+	test.skip('encode as iterator performance', async function() {
+		function* iterator() {
+			for (let i = 0; i < 1000; i++) {
+				yield {
+					a: 1,
+					b: 'hello, world',
+					c: true,
+					sub: {
+						d: 'inside',
+						e: 3
+					}
+				}
+			}
+		}
+		let result;
+		let start = performance.now();
+		for (let i = 0; i < 1000; i++) {
+			let encodedIterator = encodeAsIterator(iterator());
+			result = [...encodedIterator];
+		}
+		let deserialized = decode(Buffer.concat(result));
+		console.log(performance.now() - start, result.length);
+	});
 })
 suite('CBOR performance tests', function(){
 	test('performance JSON.parse', function() {
