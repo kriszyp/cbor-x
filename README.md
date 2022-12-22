@@ -52,6 +52,26 @@ receivingStream.on('data', (data) => {
 ```
 The `EncoderStream` and `DecoderStream` instances  will have also the record structure extension enabled by default (see below).
 
+### Iterables
+In addition to using CBOR with streams, CBOR can also encode to an iterable that can be iterated as a sequence of binary chunks with `encodeAsIterable`, which facilitates progressive encoding:
+```JavaScript
+import { encodeAsIterable } from 'cbor-x';
+
+for (let binaryChunk of encodeAsIterable(data)){
+	// progressively get binary chunks data is encoded
+}
+```
+And `encodeAsAsyncIterable` is also available, which returns an async iterable, and can be used to encode data from async iterables as well as Blob data.
+
+```JavaScript
+import { encodeAsAsyncIterable } from 'cbor-x';
+
+let data = { blob: new Blob(...) };
+for await (let binaryChunk of encodeAsAsyncIterable(data)){
+	// progressively get binary chunks data is encoded
+}
+```
+
 ## Deno Usage
 Cbor-x modules are standard ESM modules and can be loaded directly from the [deno.land registry for cbor](https://deno.land/x/cbor) for use in Deno. The standard pack/encode and unpack/decode functionality is available on Deno, like other platforms.
 
