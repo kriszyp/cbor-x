@@ -29,8 +29,8 @@ var EncoderStream = CBOR.EncoderStream
 var DecoderStream = CBOR.DecoderStream
 var decode = CBOR.decode
 var encode = CBOR.encode
-var encodeAsIterator = CBOR.encodeAsIterator
-var encodeAsAsyncIterator = CBOR.encodeAsAsyncIterator
+var encodeAsIterable = CBOR.encodeAsIterable
+var encodeAsAsyncIterable = CBOR.encodeAsAsyncIterable
 var DECIMAL_FIT = CBOR.DECIMAL_FIT
 
 var addExtension = CBOR.addExtension
@@ -703,7 +703,7 @@ suite('CBOR basic tests', function(){
 		assert.throws(function(){ decode(badInput) }) // should throw, not crash
 	})
 	test('encode as iterator', function() {
-		let hasIterators = {
+		let hasIterables = {
 			a: 1,
 			iterator: (function*() {
 				yield 2;
@@ -714,8 +714,8 @@ suite('CBOR basic tests', function(){
 				};
 			})()
 		};
-		let encodedIterator = encodeAsIterator(hasIterators);
-		let result = [...encodedIterator];
+		let encodedIterable = encodeAsIterable(hasIterables);
+		let result = [...encodedIterable];
 		result = Buffer.concat(result);
 		let deserialized = decode(result);
 		const expectedResult = {
@@ -724,9 +724,10 @@ suite('CBOR basic tests', function(){
 		};
 		assert.deepEqual(deserialized, expectedResult);
 	});
+	if (typeof Blob !== 'undefined')
 	test('encode as iterator with async/blob parts', function() {
 		let blob = new Blob([Buffer.from([4,5])]);
-		let hasIterators = {
+		let hasIterables = {
 			a: 1,
 			iterator: (async function*() {
 				yield 2;
@@ -738,13 +739,14 @@ suite('CBOR basic tests', function(){
 			})(),
 			blob
 		};
-		let encodedIterator = encodeAsIterator(hasIterators);
-		let result = [...encodedIterator];
+		let encodedIterable = encodeAsIterable(hasIterables);
+		let result = [...encodedIterable];
 		assert.equal(result[result.length - 1].constructor, Blob);
 	});
+	if (typeof Blob !== 'undefined')
 	test('encode as async iterator with async/blob parts', async function() {
 		let blob = new Blob([Buffer.from([4, 5])]);
-		let hasIterators = {
+		let hasIterables = {
 			a: 1,
 			iterator: (async function* () {
 				yield 2;
@@ -756,9 +758,9 @@ suite('CBOR basic tests', function(){
 			})(),
 			blob
 		};
-		let encodedIterator = encodeAsAsyncIterator(hasIterators);
+		let encodedIterable = encodeAsAsyncIterable(hasIterables);
 		let result = [];
-		for await (let encodedPart of encodedIterator) {
+		for await (let encodedPart of encodedIterable) {
 			result.push(encodedPart)
 		}
 		let deserialized = decode(Buffer.concat(result));
@@ -786,8 +788,8 @@ suite('CBOR basic tests', function(){
 		let result;
 		let start = performance.now();
 		for (let i = 0; i < 1000; i++) {
-			let encodedIterator = encodeAsIterator(iterator());
-			result = [...encodedIterator];
+			let encodedIterable = encodeAsIterable(iterator());
+			result = [...encodedIterable];
 		}
 		let deserialized = decode(Buffer.concat(result));
 		console.log(performance.now() - start, result.length);

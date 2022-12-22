@@ -51,6 +51,8 @@ export class Encoder extends Decoder {
 	encode(value: any): Buffer
 }
 export function encode(value: any): Buffer
+export function encodeAsIterable(value: any): Iterable<Buffer | Blob | AsyncIterable<Buffer>>
+export function encodeAsAsyncIterable(value: any): AsyncIterable<Buffer>
 
 import { Transform, Readable } from 'stream'
 

@@ -7,10 +7,11 @@ let extensions, extensionClasses
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
+const BlobConstructor = typeof Blob === 'undefined' ? {} : Blob;
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
 let serializationId = 1
-let throwOnIterator
+let throwOnIterable
 let target
 let targetView
 let position = 0
@@ -175,10 +176,10 @@ export class Encoder extends Decoder {
 					}
 				}
 			}
-			throwOnIterator = encodeOptions & THROW_ON_ITERATOR;
-			if (throwOnIterator)
-				return;
+			throwOnIterable = encodeOptions & THROW_ON_ITERABLE;
 			try {
+				if (throwOnIterable)
+					return;
 				encode(value)
 				if (bundledStrings) {
 					writeBundles(start, encode)
@@ -539,8 +540,8 @@ export class Encoder extends Decoder {
 							}
 						}
 						if (value[Symbol.iterator]) {
-							if (throwOnIterator) {
-								let error = new Error('Iterator should be serialized as iterator')
+							if (throwOnIterable) {
+								let error = new Error('Iterable should be serialized as iterator')
 								error.iteratorNotHandled = true;
 								throw error;
 							}
@@ -551,8 +552,8 @@ export class Encoder extends Decoder {
 							target[position++] = 0xff // stop-code
 							return
 						}
-						if (value[Symbol.asyncIterator] || constructor === Blob) {
-							let error = new Error('Iterator/blob should be serialized as iterator')
+						if (value[Symbol.asyncIterator] || constructor === BlobConstructor) {
+							let error = new Error('Iterable/blob should be serialized as iterator')
 							error.iteratorNotHandled = true;
 							throw error;
 						}
@@ -720,7 +721,10 @@ export class Encoder extends Decoder {
 					writeArrayHeader(length + 2)
 					encode(0xe000 + recordId)
 					encode(keys)
-					for (let v of Object.values(object)) encode(v)
+					if (safePrototype === null) return; // special exit for iterator
+					for (let key in object)
+						if (safePrototype || object.hasOwnProperty(key))
+							encode(object[key])
 					return
 				}
 			}
@@ -729,6 +733,7 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
+			if (safePrototype === null) return; // special exit for iterator
 			for (let key in object)
 				if (safePrototype || object.hasOwnProperty(key))
 					encode(object[key])
@@ -756,23 +761,27 @@ export class Encoder extends Decoder {
 		}
 		let chunkThreshold = 100;
 		let continuedChunkThreshold = 1000;
-		this.encodeAsIterator = function(value, options) {
-			return startEncoding(value, options, encodeObjectAsIterator);
+		this.encodeAsIterable = function(value, options) {
+			return startEncoding(value, options, encodeObjectAsIterable);
 		}
-		this.encodeAsAsyncIterator = function(value, options) {
-			return startEncoding(value, options, encodeObjectAsAsyncIterator);
+		this.encodeAsAsyncIterable = function(value, options) {
+			return startEncoding(value, options, encodeObjectAsAsyncIterable);
 		}
 
-		function* encodeObjectAsIterator(object, iterateProperties, finalIterator) {
+		function* encodeObjectAsIterable(object, iterateProperties, finalIterable) {
 			let constructor = object.constructor;
 			if (constructor === Object) {
-				writeEntityLength(Object.keys(object).length, 0xa0);
+				let useRecords = encoder.useRecords !== false;
+				if (useRecords)
+					writeObject(object, null); // write the record identifier
+				else
+					writeEntityLength(Object.keys(object).length, 0xa0);
 				for (let key in object) {
 					let value = object[key];
-					encode(key);
+					if (!useRecords) encode(key);
 					if (value && typeof value === 'object') {
 						if (iterateProperties[key])
-							yield* encodeObjectAsIterator(value, iterateProperties[key]);
+							yield* encodeObjectAsIterable(value, iterateProperties[key]);
 						else
 							yield* tryEncode(value, iterateProperties, key);
 					} else encode(value);
@@ -783,7 +792,7 @@ export class Encoder extends Decoder {
 					let value = object[i];
 					if (value && (typeof value === 'object' || position - start > chunkThreshold)) {
 						if (iterateProperties.element)
-							yield* encodeObjectAsIterator(value, iterateProperties.element);
+							yield* encodeObjectAsIterable(value, iterateProperties.element);
 						else
 							yield* tryEncode(value, iterateProperties, 'element');
 					} else encode(value);
@@ -793,13 +802,13 @@ export class Encoder extends Decoder {
 				for (let value of object) {
 					if (value && (typeof value === 'object' || position - start > chunkThreshold)) {
 						if (iterateProperties.element)
-							yield* encodeObjectAsIterator(value, iterateProperties.element);
+							yield* encodeObjectAsIterable(value, iterateProperties.element);
 						else
 							yield* tryEncode(value, iterateProperties, 'element');
 					} else encode(value);
 				}
 				target[position++] = 0xff; // stop byte
-			} else if (constructor === Blob){
+			} else if (constructor === BlobConstructor){
 				writeEntityLength(object.size, 0x40); // encode as binary data
 				yield target.subarray(start, position);
 				yield object; // directly return blobs, they have to be encoded asynchronously
@@ -813,7 +822,7 @@ export class Encoder extends Decoder {
 			} else {
 				encode(object);
 			}
-			if (finalIterator && position > start) yield target.subarray(start, position);
+			if (finalIterable && position > start) yield target.subarray(start, position);
 			else if (position - start > chunkThreshold) {
 				yield target.subarray(start, position);
 				restartEncoding();
@@ -831,32 +840,32 @@ export class Encoder extends Decoder {
 				if (error.iteratorNotHandled) {
 					iterateProperties[key] = {};
 					position = start + restart; // restart our position so we don't have partial data from last encode
-					yield* encodeObjectAsIterator.call(this, value, iterateProperties[key]);
+					yield* encodeObjectAsIterable.call(this, value, iterateProperties[key]);
 				} else throw error;
 			}
 		}
 		function restartEncoding() {
 			chunkThreshold = continuedChunkThreshold;
-			encoder.encode(null, THROW_ON_ITERATOR); // restart encoding
+			encoder.encode(null, THROW_ON_ITERABLE); // restart encoding
 		}
-		function startEncoding(value, options, encodeIterator) {
+		function startEncoding(value, options, encodeIterable) {
 			if (options && options.chunkThreshold) // explicitly specified chunk sizes
 				chunkThreshold = continuedChunkThreshold = options.chunkThreshold;
 			else // we start with a smaller threshold to get initial bytes sent quickly
 				chunkThreshold = 100;
 			if (value && typeof value === 'object') {
-				encoder.encode(null, THROW_ON_ITERATOR); // start encoding
-				return encodeIterator(value, encoder.iterateProperties || (encoder.iterateProperties = {}), true);
+				encoder.encode(null, THROW_ON_ITERABLE); // start encoding
+				return encodeIterable(value, encoder.iterateProperties || (encoder.iterateProperties = {}), true);
 			}
 			return [encoder.encode(value)];
 		}
 
-		async function* encodeObjectAsAsyncIterator(value, iterateProperties) {
-			for (let encodedValue of encodeObjectAsIterator(value, iterateProperties, true)) {
+		async function* encodeObjectAsAsyncIterable(value, iterateProperties) {
+			for (let encodedValue of encodeObjectAsIterable(value, iterateProperties, true)) {
 				let constructor = encodedValue.constructor;
 				if (constructor === ByteArray || constructor === Uint8Array)
 					yield encodedValue;
-				else if (constructor === Blob) {
+				else if (constructor === BlobConstructor) {
 					let reader = encodedValue.stream().getReader();
 					let next;
 					while (!(next = await reader.read()).done) {
@@ -866,7 +875,7 @@ export class Encoder extends Decoder {
 					for await (let asyncValue of encodedValue) {
 						restartEncoding();
 						if (asyncValue)
-							yield* encodeObjectAsAsyncIterator(asyncValue, iterateProperties.async || (iterateProperties.async = {}));
+							yield* encodeObjectAsAsyncIterable(asyncValue, iterateProperties.async || (iterateProperties.async = {}));
 						else yield encoder.encode(asyncValue);
 					}
 				} else {
@@ -1183,13 +1192,13 @@ export function addExtension(extension) {
 }
 let defaultEncoder = new Encoder({ useRecords: false })
 export const encode = defaultEncoder.encode
-export const encodeAsIterator = defaultEncoder.encodeAsIterator
-export const encodeAsAsyncIterator = defaultEncoder.encodeAsAsyncIterator
+export const encodeAsIterable = defaultEncoder.encodeAsIterable
+export const encodeAsAsyncIterable = defaultEncoder.encodeAsAsyncIterable
 export { FLOAT32_OPTIONS } from './decode.js'
 import { FLOAT32_OPTIONS } from './decode.js'
 export const { NEVER, ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } = FLOAT32_OPTIONS
 export const REUSE_BUFFER_MODE = 512
 export const RESET_BUFFER_MODE = 1024
-export const THROW_ON_ITERATOR = 2048
+export const THROW_ON_ITERABLE = 2048
 
 
