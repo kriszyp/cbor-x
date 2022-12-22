@@ -58,7 +58,7 @@ In addition to using CBOR with streams, CBOR can also encode to an iterable that
 import { encodeAsIterable } from 'cbor-x';
 
 for (let binaryChunk of encodeAsIterable(data)){
-	// progressively get binary chunks data is encoded
+	// progressively get binary chunks as data is encoded
 }
 ```
 And `encodeAsAsyncIterable` is also available, which returns an async iterable, and can be used to encode data from async iterables as well as Blob data.
@@ -68,7 +68,7 @@ import { encodeAsAsyncIterable } from 'cbor-x';
 
 let data = { blob: new Blob(...) };
 for await (let binaryChunk of encodeAsAsyncIterable(data)){
-	// progressively get binary chunks data is encoded
+	// progressively get binary chunks as asynchronous data source is encoded
 }
 ```
 
