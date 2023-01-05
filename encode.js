@@ -7,7 +7,6 @@ let extensions, extensionClasses
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
-const BlobConstructor = typeof Blob === 'undefined' ? {} : Blob;
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
 let serializationId = 1
@@ -552,7 +551,7 @@ export class Encoder extends Decoder {
 							target[position++] = 0xff // stop-code
 							return
 						}
-						if (value[Symbol.asyncIterator] || constructor === BlobConstructor) {
+						if (value[Symbol.asyncIterator] || isBlob(value)) {
 							let error = new Error('Iterable/blob should be serialized as iterator')
 							error.iteratorNotHandled = true;
 							throw error;
@@ -808,7 +807,7 @@ export class Encoder extends Decoder {
 					} else encode(value);
 				}
 				target[position++] = 0xff; // stop byte
-			} else if (constructor === BlobConstructor){
+			} else if (isBlob(object)){
 				writeEntityLength(object.size, 0x40); // encode as binary data
 				yield target.subarray(start, position);
 				yield object; // directly return blobs, they have to be encoded asynchronously
@@ -865,7 +864,7 @@ export class Encoder extends Decoder {
 				let constructor = encodedValue.constructor;
 				if (constructor === ByteArray || constructor === Uint8Array)
 					yield encodedValue;
-				else if (constructor === BlobConstructor) {
+				else if (isBlob(encodedValue)) {
 					let reader = encodedValue.stream().getReader();
 					let next;
 					while (!(next = await reader.read()).done) {
@@ -960,6 +959,13 @@ function writeArrayHeader(length) {
 	}
 }
 
+const BlobConstructor = typeof Blob === 'undefined' ? function(){} : Blob;
+function isBlob(object) {
+	if (object instanceof BlobConstructor)
+		return true;
+	let tag = object[Symbol.toStringTag];
+	return tag === 'Blob' || tag === 'File';
+}
 function findRepetitiveStrings(value, packedValues) {
 	switch(typeof value) {
 		case 'string':
