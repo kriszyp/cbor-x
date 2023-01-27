@@ -378,7 +378,15 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.children[0], deserialized.children[2])
 		assert.equal(deserialized.children, deserialized.childrenAgain)
 	})
-
+	test('nested same key', function() {
+		const encoder = new Encoder();
+		const r_key = "key";
+		const d_key = "key";
+		const data = { [r_key]: { [d_key]: "foo" } };
+		const enc = encoder.encode(data);
+		const dec = encoder.decode(enc);
+		assert.deepEqual(dec, data);
+	});
 	test('decode float 16', function() {
 		assert.equal(decode(new Uint8Array([0xF9, 0x4A, 0x60])), 12.75);
 		assert.equal(decode(new Uint8Array([0xF9, 0xC4, 0x80])), -4.5);

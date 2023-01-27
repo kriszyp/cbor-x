@@ -361,13 +361,28 @@ export function read() {
 					return structure.read()
 				}
 				if (token < 0x10000) {
-					if (token == RECORD_INLINE_ID) // we do a special check for this so that we can keep the currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
-						return recordDefinition(read())
+					if (token == RECORD_INLINE_ID) { // we do a special check for this so that we can keep the
+						// currentExtensions as densely stored array (v8 stores arrays densely under about 3000 elements)
+						let length = readJustLength()
+						let id = read()
+						let structure = read()
+						recordDefinition(id, structure)
+						let object = {}
+						if (currentDecoder.keyMap) for (let i = 2; i < length; i++) {
+							let key = currentDecoder.decodeKey(structure[i - 2])
+							object[safeKey(key)] = read()
+						}
+						else for (let i = 2; i < length; i++) {
+							let key = structure[i - 2]
+							object[safeKey(key)] = read()
+						}
+						return object
+					}
 					else if (token == RECORD_DEFINITIONS_ID) {
 						let length = readJustLength()
 						let id = read()
 						for (let i = 2; i < length; i++) {
-							recordDefinition([id++, read()])
+							recordDefinition(id++, read())
 						}
 						return read()
 					} else if (token == BUNDLED_STRINGS_ID) {
@@ -875,9 +890,8 @@ currentExtensions[5] = (fraction) => {
 }
 
 // the registration of the record definition extension
-const recordDefinition = (definition) => {
-	let id = definition[0] - 0xe000
-	let structure = definition[1]
+const recordDefinition = (id, structure) => {
+	id = id - 0xe000
 	let existingStructure = currentStructures[id]
 	if (existingStructure && existingStructure.isShared) {
 		(currentStructures.restoreStructures || (currentStructures.restoreStructures = []))[id] = existingStructure
@@ -885,18 +899,18 @@ const recordDefinition = (definition) => {
 	currentStructures[id] = structure
 
 	structure.read = createStructureReader(structure)
+}
+currentExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
+	let length = data.length
+	let structure = data[1]
+	recordDefinition(data[0], structure)
 	let object = {}
-	if (currentDecoder.keyMap) for (let i = 2,l = definition.length; i < l; i++) {
-			let key = currentDecoder.decodeKey(structure[i - 2])
-			object[safeKey(key)] = definition[i]
-		}
-	else for (let i = 2,l = definition.length; i < l; i++) {
-			let key = structure[i - 2]
-			object[safeKey(key)] = definition[i]
-		}
+	for (let i = 2; i < length; i++) {
+		let key = structure[i - 2]
+		object[safeKey(key)] = data[i]
+	}
 	return object
 }
-currentExtensions[LEGACY_RECORD_INLINE_ID] = recordDefinition
 currentExtensions[14] = (value) => {
 	if (bundledStrings)
 		return bundledStrings[0].slice(bundledStrings.position0, bundledStrings.position0 += value)
