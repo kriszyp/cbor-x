@@ -787,7 +787,8 @@ export class Encoder extends Decoder {
 					} else encode(value);
 				}
 			} else if (constructor === Array) {
-				writeArrayHeader(object.length);
+				let length = object.length;
+				writeArrayHeader(length);
 				for (let i = 0; i < length; i++) {
 					let value = object[i];
 					if (value && (typeof value === 'object' || position - start > chunkThreshold)) {
