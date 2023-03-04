@@ -55,6 +55,8 @@
         "import": "./decode.js"
       }
     },
+    "./decode-no-eval": "./dist/decode-no-eval.cjs",
+    "./index-no-eval": "./dist/index-no-eval.cjs",
     "./package.json": "./package.json"
   },
   "files": [
