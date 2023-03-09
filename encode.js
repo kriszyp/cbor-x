@@ -397,7 +397,7 @@ export class Encoder extends Decoder {
 				}
 				position += length
 			} else if (type === 'number') {
-				if (value >>> 0 === value) {// positive integer, 32-bit or less
+				if (!this.alwaysUseFloat && value >>> 0 === value) {// positive integer, 32-bit or less
 					// positive uint
 					if (value < 0x18) {
 						target[position++] = value
@@ -413,7 +413,7 @@ export class Encoder extends Decoder {
 						targetView.setUint32(position, value)
 						position += 4
 					}
-				} else if (value >> 0 === value) { // negative integer
+				} else if (!this.alwaysUseFloat && value >> 0 === value) { // negative integer
 					if (value >= -0x18) {
 						target[position++] = 0x1f - value
 					} else if (value >= -0x100) {

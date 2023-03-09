@@ -583,6 +583,16 @@ suite('CBOR basic tests', function(){
 		var deserialized = encoder.decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
+	test('decimal alwaysUseFloat', function() {
+		var data = 123
+		let encoder = new Encoder({
+			alwaysUseFloat: true
+		})
+		var serialized = encoder.encode(data)
+		assert.equal(serialized.length, 9)
+		var deserialized = encoder.decode(serialized)
+		assert.equal(deserialized, data)
+	})
 	test('bigint to float', function() {
 		var data = {
 			a: 325283295382932843n

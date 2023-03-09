@@ -6,6 +6,7 @@ export enum FLOAT32_OPTIONS {
 }
 
 export interface Options {
+	alwaysUseFloat?: boolean
 	useFloat32?: FLOAT32_OPTIONS
 	useRecords?: boolean
 	structures?: {}[]
