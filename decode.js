@@ -1060,9 +1060,11 @@ for (let i = 0; i < typedArrays.length; i++) {
 }
 function registerTypedArray(TypedArray, tag) {
 	let dvMethod = 'get' + TypedArray.name.slice(0, -5)
-	if (typeof TypedArray !== 'function')
+	let bytesPerElement;
+	if (typeof TypedArray === 'function')
+		bytesPerElement = TypedArray.BYTES_PER_ELEMENT;
+	else
 		TypedArray = null;
-	let bytesPerElement = TypedArray.BYTES_PER_ELEMENT
 	for (let littleEndian = 0; littleEndian < 2; littleEndian++) {
 		if (!littleEndian && bytesPerElement == 1)
 			continue
