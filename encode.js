@@ -4,7 +4,7 @@ try {
 	textEncoder = new TextEncoder()
 } catch (error) {}
 let extensions, extensionClasses
-const Buffer = globalThis.Buffer
+const Buffer = typeof globalThis === 'object' && globalThis.Buffer;
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
