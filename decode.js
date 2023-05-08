@@ -33,6 +33,17 @@ let defaultOptions = {
 	mapsAsObjects: true
 }
 let sequentialMode = false
+let inlineObjectReadThreshold = 2;
+var BlockedFunction // we use search and replace to change the next call to BlockedFunction to avoid CSP issues for
+// no-eval build
+try {
+	new Function('')
+} catch(error) {
+	// if eval variants are not supported, do not create inline object readers ever
+	inlineObjectReadThreshold = Infinity
+}
+
+
 
 export class Decoder {
 	constructor(options) {
@@ -468,7 +479,7 @@ function createStructureReader(structure) {
 				return compiledReader(read) // with the right length, so we use it
 			compiledReader = compiledReader.next // see if there is another reader with the right length
 		}
-		if (this.slowReads++ >= 3) { // create a fast compiled reader
+		if (this.slowReads++ >= inlineObjectReadThreshold) { // create a fast compiled reader
 			let array = this.length == length ? this : this.slice(0, length)
 			compiledReader = currentDecoder.keyMap 
 			? new Function('r', 'return {' + array.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) ? safeKey(k) + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
