@@ -28,6 +28,7 @@ export interface Options {
 	onInvalidDate?: () => any
 	tagUint8Array?: boolean
 	pack?: boolean
+	sequential?: boolean
 }
 type ClassOf<T> = new (...args: any[]) => T;
 interface Extension<T, R> {
