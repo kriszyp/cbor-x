@@ -557,6 +557,13 @@ export class Encoder extends Decoder {
 							error.iteratorNotHandled = true;
 							throw error;
 						}
+						if (this.useToJSON && value.toJSON) {
+							const json = value.toJSON()
+							// if for some reason value.toJSON returns itself it'll loop forever
+							if (json !== value)
+								return encode(json)
+						}
+
 						// no extension found, write as object
 						writeObject(value, !value.hasOwnProperty) // if it doesn't have hasOwnProperty, don't do hasOwnProperty checks
 					}

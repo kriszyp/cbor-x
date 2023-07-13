@@ -21,6 +21,7 @@ export interface Options {
 	maxSharedStructures?: number
 	maxOwnStructures?: number
 	useSelfDescribedHeader?: boolean
+	useToJSON?: boolean
 	keyMap?: {}
 	shouldShareStructure?: (keys: string[]) => boolean
 	getStructures?(): {}[]
