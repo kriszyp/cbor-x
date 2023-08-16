@@ -618,7 +618,7 @@ export class Encoder extends Decoder {
 			let key
 			if (encoder.keyMap) { 
 				for (let i = 0; i < length; i++) {
-					encode(encodeKey(keys[i]))
+					encode(encoder.encodeKey(keys[i]))
 					encode(vals[i])
 				}
 			} else {
