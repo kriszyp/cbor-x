@@ -13,10 +13,12 @@ export class EncoderStream extends Transform {
 		this.encoder = options.encoder || new Encoder(options)
 	}
 	async _transform(value, encoding, callback) {
-		for await (let chunk of this.encoder.encodeAsAsyncIterable(value)) {
-			this.push(chunk)
-		}
-		callback()
+		try {
+			for await (let chunk of this.encoder.encodeAsAsyncIterable(value)) {
+				this.push(chunk)
+			}
+			callback()
+		} catch(error) { callback (error) }
 	}
 }
 
