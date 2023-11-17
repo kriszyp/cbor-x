@@ -966,7 +966,10 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 	}
 	if (typeof data == 'number')
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
-	throw new Error('No support for non-integer packed references yet')
+	let error = new Error('No support for non-integer packed references yet')
+	if (data === undefined)
+		error.incomplete = true
+	throw error
 }
 
 // The following code is an incomplete implementation of http://cbor.schmorp.de/stringref
