@@ -937,9 +937,18 @@ currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
 const packedTable = (read) => {
-	if (src[position++] != 0x84)
-		throw new Error('Packed values structure must be followed by a 4 element array')
+	if (src[position++] != 0x84) {
+		let error = new Error('Packed values structure must be followed by a 4 element array')
+		if (src.length < position)
+			error.incomplete = true
+		throw error
+	}
 	let newPackedValues = read() // packed values
+	if (!newPackedValues || !newPackedValues.length) {
+		let error = new Error('Packed values structure must be followed by a 4 element array')
+		error.incomplete = true
+		throw error
+	}
 	packedValues = packedValues ? newPackedValues.concat(packedValues.slice(newPackedValues.length)) : newPackedValues
 	packedValues.prefixes = read()
 	packedValues.suffixes = read()
