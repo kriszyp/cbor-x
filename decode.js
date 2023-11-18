@@ -937,9 +937,18 @@ currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
 const packedTable = (read) => {
-	if (src[position++] != 0x84)
-		throw new Error('Packed values structure must be followed by a 4 element array')
+	if (src[position++] != 0x84) {
+		let error = new Error('Packed values structure must be followed by a 4 element array')
+		if (src.length < position)
+			error.incomplete = true
+		throw error
+	}
 	let newPackedValues = read() // packed values
+	if (!newPackedValues || !newPackedValues.length) {
+		let error = new Error('Packed values structure must be followed by a 4 element array')
+		error.incomplete = true
+		throw error
+	}
 	packedValues = packedValues ? newPackedValues.concat(packedValues.slice(newPackedValues.length)) : newPackedValues
 	packedValues.prefixes = read()
 	packedValues.suffixes = read()
@@ -957,7 +966,10 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 	}
 	if (typeof data == 'number')
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
-	throw new Error('No support for non-integer packed references yet')
+	let error = new Error('No support for non-integer packed references yet')
+	if (data === undefined)
+		error.incomplete = true
+	throw error
 }
 
 // The following code is an incomplete implementation of http://cbor.schmorp.de/stringref
