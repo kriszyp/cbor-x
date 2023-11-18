@@ -39,13 +39,12 @@ export class DecoderStream extends Transform {
 		let values
 		try {
 			values = this.decoder.decodeMultiple(chunk)
-			callback()
 		} catch(error) {
 			if (error.incomplete) {
 				this.incompleteBuffer = chunk.slice(error.lastPosition)
 				values = error.values
 			} else {
-				callback(error)
+				return callback(error)
 			}
 		} finally {
 			for (let value of values || []) {
@@ -54,6 +53,7 @@ export class DecoderStream extends Transform {
 				this.push(value)
 			}
 		}
+		callback()
 	}
 	getNullValue() {
 		return Symbol.for(null)
