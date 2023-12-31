@@ -1,4 +1,4 @@
-import * as CBOR from '../index.js'
+import * as CBOR from '../node-index.js'
 import chai from 'chai'
 import { readFileSync } from 'fs'
 const sampleData = JSON.parse(readFileSync(new URL('./example4.json', import.meta.url)))
@@ -274,7 +274,6 @@ suite('CBOR basic tests', function(){
 		assert.deepEqual(deserialized1, data1)
 		assert.deepEqual(deserialized2, data2)
 	})
-
 	test('extended class encode/decode', function(){
 		function Extended() {
 
