@@ -66,3 +66,9 @@ export class DecoderStream extends Transform {
 export class EncoderStream extends Transform {
 	constructor(options?: Options | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean })
 }
+
+export class Tag {
+	constructor(value: any, tagNumber: number)
+	value: any
+	tag: number
+}
