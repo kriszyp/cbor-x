@@ -502,7 +502,11 @@ function createStructureReader(structure) {
 }
 
 function safeKey(key) {
-	return key === '__proto__' ? '__proto_' : key
+	// protect against prototype pollution
+	if (typeof key === 'string') return key === '__proto__' ? '__proto_' : key
+	if (typeof key !== 'object') return key.toString()
+	// protect against expensive (DoS) string conversions
+	throw new Error('Invalid property name type ' + typeof key);
 }
 
 let readFixedString = readStringJS
