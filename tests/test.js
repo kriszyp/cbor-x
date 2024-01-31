@@ -811,6 +811,15 @@ suite('CBOR basic tests', function(){
 		let deserialized = decode(Buffer.concat(result));
 		console.log(performance.now() - start, result.length);
 	});
+
+	test('little-endian typed array with aligned data', function() {
+	    // array[1] { uint32-little-endian-typed-array { bytes <00 00 00 00> } }
+	    let data = new Uint8Array([ 129, 216, 70, 68, 0, 0, 0, 0 ]);
+	    assert.deepEqual(decode(data), [new Uint32Array([0])]);
+
+	    let value = {x: new Float32Array([1, 2, 3])};
+	    assert.deepEqual(decode(encode(value)), value);
+	});
 })
 suite('CBOR performance tests', function(){
 	test('performance JSON.parse', function() {

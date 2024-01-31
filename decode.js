@@ -1095,7 +1095,7 @@ function registerTypedArray(TypedArray, tag) {
 	for (let littleEndian = 0; littleEndian < 2; littleEndian++) {
 		if (!littleEndian && bytesPerElement == 1)
 			continue
-		let sizeShift = bytesPerElement == 2 ? 1 : bytesPerElement == 4 ? 2 : 3
+		let sizeShift = bytesPerElement == 2 ? 1 : bytesPerElement == 4 ? 2 : bytesPerElement == 8 ? 3 : 0
 		currentExtensions[littleEndian ? tag : (tag - 4)] = (bytesPerElement == 1 || littleEndian == isLittleEndianMachine) ? (buffer) => {
 			if (!TypedArray)
 				throw new Error('Could not find typed array for code ' + tag)
@@ -1105,7 +1105,7 @@ function registerTypedArray(TypedArray, tag) {
 					bytesPerElement === 2 && !(buffer.byteOffset & 1) ||
 					bytesPerElement === 4 && !(buffer.byteOffset & 3) ||
 					bytesPerElement === 8 && !(buffer.byteOffset & 7))
-					return new TypedArray(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+					return new TypedArray(buffer.buffer, buffer.byteOffset, buffer.byteLength >> sizeShift);
 			}
 			// we have to slice/copy here to get a new ArrayBuffer, if we are not word/byte aligned
 			return new TypedArray(Uint8Array.prototype.slice.call(buffer, 0).buffer)
