@@ -451,6 +451,12 @@ suite('CBOR basic tests', function(){
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
+	test('object with __proto__', function(){
+		const data = { foo: 'bar', __proto__: { isAdmin: true } };
+		var serialized = encode(data)
+		var deserialized = decode(serialized)
+		assert.deepEqual(deserialized, { foo: 'bar' });
+	})
 
 	test('big buffer', function() {
 		var size = 100000000

@@ -469,7 +469,7 @@ export class Encoder extends Decoder {
 					}
 					let constructor = value.constructor
 					if (constructor === Object) {
-						writeObject(value, true)
+						writeObject(value)
 					} else if (constructor === Array) {
 						length = value.length
 						if (length < 0x18) {
@@ -564,8 +564,8 @@ export class Encoder extends Decoder {
 								return encode(json)
 						}
 
-						// no extension found, write as object
-						writeObject(value, !value.hasOwnProperty) // if it doesn't have hasOwnProperty, don't do hasOwnProperty checks
+						// no extension found, write as a plain object
+						writeObject(value)
 					}
 				}
 			} else if (type === 'boolean') {
@@ -628,19 +628,19 @@ export class Encoder extends Decoder {
 				}
 			}
 		} :
-		(object, safePrototype) => {
+		(object) => {
 			target[position++] = 0xb9 // always use map 16, so we can preallocate and set the length afterwards
 			let objectOffset = position - start
 			position += 2
 			let size = 0
 			if (encoder.keyMap) { 
-				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 					encode(encoder.encodeKey(key))
 					encode(object[key])
 					size++
 				}
 			} else { 
-				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 						encode(key)
 						encode(object[key])
 					size++
@@ -649,7 +649,7 @@ export class Encoder extends Decoder {
 			target[objectOffset++ + start] = size >> 8
 			target[objectOffset + start] = size & 0xff
 		} :
-		(object, safePrototype) => {
+		(object, skipValues) => {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
 			let newTransitions = 0
 			let length = 0
@@ -668,7 +668,7 @@ export class Encoder extends Decoder {
 					transition = nextTransition
 				}				
 			} else {
-				for (let key in object) if (safePrototype || object.hasOwnProperty(key)) {
+				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 					nextTransition = transition[key]
 					if (!nextTransition) {
 						if (transition[RECORD_SYMBOL] & 0x100000) {// this indicates it is a brancheable/extendable terminal node, so we will use this record id and extend it
@@ -728,9 +728,9 @@ export class Encoder extends Decoder {
 					writeArrayHeader(length + 2)
 					encode(0xe000 + recordId)
 					encode(keys)
-					if (safePrototype === null) return; // special exit for iterator
+					if (skipValues) return; // special exit for iterator
 					for (let key in object)
-						if (safePrototype || object.hasOwnProperty(key))
+						if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key))
 							encode(object[key])
 					return
 				}
@@ -740,9 +740,9 @@ export class Encoder extends Decoder {
 			} else {
 				writeArrayHeader(length)
 			}
-			if (safePrototype === null) return; // special exit for iterator
+			if (skipValues) return; // special exit for iterator
 			for (let key in object)
-				if (safePrototype || object.hasOwnProperty(key))
+				if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key))
 					encode(object[key])
 		}
 		const makeRoom = (end) => {
@@ -780,7 +780,7 @@ export class Encoder extends Decoder {
 			if (constructor === Object) {
 				let useRecords = encoder.useRecords !== false;
 				if (useRecords)
-					writeObject(object, null); // write the record identifier
+					writeObject(object, true); // write the record identifier
 				else
 					writeEntityLength(Object.keys(object).length, 0xa0);
 				for (let key in object) {
