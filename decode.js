@@ -504,7 +504,8 @@ function createStructureReader(structure) {
 function safeKey(key) {
 	// protect against prototype pollution
 	if (typeof key === 'string') return key === '__proto__' ? '__proto_' : key
-	if (typeof key !== 'object') return key.toString()
+	if (typeof property === 'number' || typeof property === 'boolean' || typeof property === 'bigint') return property.toString();
+	if (property == null) return property + '';
 	// protect against expensive (DoS) string conversions
 	throw new Error('Invalid property name type ' + typeof key);
 }
