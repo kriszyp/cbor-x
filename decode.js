@@ -504,8 +504,8 @@ function createStructureReader(structure) {
 function safeKey(key) {
 	// protect against prototype pollution
 	if (typeof key === 'string') return key === '__proto__' ? '__proto_' : key
-	if (typeof property === 'number' || typeof property === 'boolean' || typeof property === 'bigint') return property.toString();
-	if (property == null) return property + '';
+	if (typeof key === 'number' || typeof key === 'boolean' || typeof key === 'bigint') return key.toString();
+	if (key == null) return key + '';
 	// protect against expensive (DoS) string conversions
 	throw new Error('Invalid property name type ' + typeof key);
 }
@@ -1001,6 +1001,7 @@ currentExtensions[28] = (read) => {
 		referenceMap.id = 0
 	}
 	let id = referenceMap.id++
+	let startingPosition = position
 	let token = src[position]
 	let target
 	// TODO: handle Maps, Sets, and other types that can cycle; this is complicated, because you potentially need to read
@@ -1013,8 +1014,20 @@ currentExtensions[28] = (read) => {
 	let refEntry = { target } // a placeholder object
 	referenceMap.set(id, refEntry)
 	let targetProperties = read() // read the next value as the target object to id
-	if (refEntry.used) // there is a cycle, so we have to assign properties to original target
+	if (refEntry.used) {// there is a cycle, so we have to assign properties to original target
+		if (Object.getPrototypeOf(target) !== Object.getPrototypeOf(targetProperties)) {
+			// this means that the returned target does not match the targetProperties, so we need rerun the read to
+			// have the correctly create instance be assigned as a reference, then we do the copy the properties back to the
+			// target
+			// reset the position so that the read can be repeated
+			position = startingPosition
+			// the returned instance is our new target for references
+			target = targetProperties
+			referenceMap.set(id, { target })
+			targetProperties = read()
+		}
 		return Object.assign(target, targetProperties)
+	}
 	refEntry.target = targetProperties // the placeholder wasn't used, replace with the deserialized one
 	return targetProperties // no cycle, can just use the returned read object
 }

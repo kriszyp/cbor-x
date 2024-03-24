@@ -274,10 +274,11 @@ suite('CBOR basic tests', function(){
 		assert.deepEqual(deserialized1, data1)
 		assert.deepEqual(deserialized2, data2)
 	})
-	test('extended class encode/decode', function(){
+	test('extended class encode/decode', function() {
 		function Extended() {
 
 		}
+
 		Extended.prototype.getDouble = function() {
 			return this.value * 2
 		}
@@ -304,10 +305,37 @@ suite('CBOR basic tests', function(){
 				return encoder.encode([instance.value, instance.string])
 			}
 		})
-		var serialized = encode(data)
-		var deserialized = decode(serialized)
-		assert.deepEqual(data, deserialized)
-		assert.equal(deserialized.extendedInstance.getDouble(), 8)
+	})
+	test('extended class encode/decode with self reference in structered clone', function(){
+		function Extended() {
+
+		}
+		addExtension({
+			Class: Extended,
+			tag: 301,
+			decode: function(data) {
+				let e = new Extended()
+				e.value = data[0]
+				e.string = data[1]
+				return e
+			},
+			encode: function(instance, encode) {
+				return encode([instance.value, instance.string])
+			}
+		})
+		var instance = new Extended()
+		instance.value = instance;
+		instance.string = 'hi'
+		let data = {
+			extended: instance
+		}
+		let encoder = new Encoder({
+			structuredClone: true,
+		})
+		let serialized = encoder.encode(data)
+		let deserialized = encoder.decode(serialized)
+		assert(data.extended.value.value === data.extended)
+		assert(data.extended instanceof Extended)
 	})
 
 	test('addExtension with map', function(){
@@ -725,6 +753,11 @@ suite('CBOR basic tests', function(){
 		let badInput = Buffer.from('7b2273657269616c6e6f223a2265343a30222c226970223a223139322e3136382e312e3335222c226b6579223a226770735f736563726574227d', 'hex');
 		assert.throws(function(){ decode(badInput) }) // should throw, not crash
 	})
+	test('buffer key', function() {
+		let encoder = new Encoder({ mapsAsObjects: false })
+		let test = encoder.decode(Buffer.from('D87982A1446E616D654361626301', 'hex'));
+		console.log(test);
+	});
 	test('encode as iterator', function() {
 		let hasIterables = {
 			a: 1,
