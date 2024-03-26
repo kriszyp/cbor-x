@@ -4,7 +4,10 @@ export enum FLOAT32_OPTIONS {
 	DECIMAL_ROUND = 3,
 	DECIMAL_FIT = 4
 }
-
+export interface MAX_LIMITS_OPTIONS {
+	MAX_ARRAY_SIZE: number;
+	MAX_OBJECT_ITEMS: number;
+}
 export interface Options {
 	alwaysUseFloat?: boolean
 	useFloat32?: FLOAT32_OPTIONS
@@ -43,6 +46,7 @@ export class Decoder {
 	decode(messagePack: Buffer | Uint8Array): any
 	decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 }
+export function setMaxLimits(options: MAX_LIMITS_OPTIONS): void
 export function decode(messagePack: Buffer | Uint8Array): any
 export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 export function addExtension<T, R>(extension: Extension<T, R>): void
