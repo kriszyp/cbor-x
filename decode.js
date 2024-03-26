@@ -14,6 +14,10 @@ const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
+const MAX_LIMITS = {
+	MAX_ARRAY_SIZE: 1000000,
+	MAX_OBJECT_ITEMS: 1000000,
+}
 let strings = EMPTY_ARRAY
 let stringPosition = 0
 let currentDecoder = {}
@@ -294,6 +298,9 @@ export function read() {
 						let array = []
 						let value, i = 0
 						while ((value = read()) != STOP_CODE) {
+							if( i >= MAX_LIMITS.MAX_ARRAY_SIZE) {
+								throw new Error(`Length exceed ${MAX_LIMITS.MAX_ARRAY_SIZE}`);
+							}
 							array[i++] = value
 						}
 						return majorType == 4 ? array : majorType == 3 ? array.join('') : Buffer.concat(array)
@@ -301,8 +308,23 @@ export function read() {
 						let key
 						if (currentDecoder.mapsAsObjects) {
 							let object = {}
-							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) object[safeKey(currentDecoder.decodeKey(key))] = read()
-							else while ((key = read()) != STOP_CODE) object[safeKey(key)] = read()
+							let i = 0;
+							if (currentDecoder.keyMap) {
+								while((key = read()) != STOP_CODE) {
+									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
+										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									}
+									object[safeKey(currentDecoder.decodeKey(key))] = read(); i++;
+								}
+							}
+							else {
+								while ((key = read()) != STOP_CODE) {
+									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
+										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									}
+									object[safeKey(key)] = read(); i++;
+								}
+							}
 							return object
 						} else {
 							if (restoreMapsAsObject) {
