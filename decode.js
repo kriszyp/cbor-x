@@ -332,8 +332,24 @@ export function read() {
 								restoreMapsAsObject = false
 							}
 							let map = new Map()
-							if (currentDecoder.keyMap) while((key = read()) != STOP_CODE) map.set(currentDecoder.decodeKey(key), read())
-							else while ((key = read()) != STOP_CODE) map.set(key, read())
+							if (currentDecoder.keyMap) {
+								let i = 0;
+								while((key = read()) != STOP_CODE) {
+									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
+										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									}
+									map.set(currentDecoder.decodeKey(key), read()); i++;
+								}
+							}
+							else {
+								let i = 0;
+								while ((key = read()) != STOP_CODE) {
+									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
+										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									}
+									map.set(key, read()); i++;
+								}
+							}
 							return map
 						}
 					case 7:
