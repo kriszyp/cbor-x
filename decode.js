@@ -14,7 +14,7 @@ const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
-const MAX_LIMITS = {
+export let MAX_LIMITS = {
 	MAX_ARRAY_SIZE: 1000000,
 	MAX_OBJECT_ITEMS: 1000000,
 }
@@ -1272,6 +1272,10 @@ export function clearSource() {
 
 export function addExtension(extension) {
 	currentExtensions[extension.tag] = extension.decode
+}
+
+export function setMaxLimits(limits) {
+	MAX_LIMITS = limits;
 }
 
 export const mult10 = new Array(147) // this is a table matching binary exponents to the multiplier to determine significant digit rounding
