@@ -805,7 +805,7 @@ export class Encoder extends Decoder {
 							yield* tryEncode(value, iterateProperties, 'element');
 					} else encode(value);
 				}
-			} else if (object[Symbol.iterator]) {
+			} else if (object[Symbol.iterator] && !object.buffer) { // iterator, but exclude typed arrays
 				target[position++] = 0x9f; // start indefinite array
 				for (let value of object) {
 					if (value && (typeof value === 'object' || position - start > chunkThreshold)) {
