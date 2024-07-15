@@ -228,6 +228,18 @@ Note, that the performance is decreased with decimal rounding by about 20-25%, a
 
 In addition, msgpackr exports a `roundFloat32(number)` function that can be used to round floating point numbers to the maximum significant decimal digits that can be stored in 32-bit float, just as DECIMAL_ROUND does when decoding. This can be useful for determining how a number will be decoded prior to encoding it.
 
+### Setting Size Limits
+You can set size limits on objects, arrays, and maps to prevent resource exhaustion when decoding. This can be done by calling the setMaxLimits export. Each of the properties are optional (only provide 
+the properties you want to change), for example (with the defaults):
+```JavaScript
+import { setMaxLimits } from 'cbor-x';
+setMaxLimits({
+	maxArraySize: 112810000, 
+	maxMapSize: 16810000,
+	maxObjectSize : 16710000
+});
+```
+
 ## Performance
 Cbor-x is fast. Really fast. Here is comparison with the next fastest JS projects using the benchmark tool from `msgpack-lite` (and the sample data is from some clinical research data we use that has a good mix of different value types and structures). It also includes comparison to V8 native JSON functionality, and JavaScript Avro (`avsc`, a very optimized Avro implementation):
 

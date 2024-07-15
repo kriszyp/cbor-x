@@ -1273,9 +1273,10 @@ export function addExtension(extension) {
 	currentExtensions[extension.tag] = extension.decode
 }
 
-export function setMaxLimits(limits) {
+export function setSizeLimits(limits) {
 	if (limits.maxMapSize) maxMapSize = limits.maxMapSize;
 	if (limits.maxArraySize) maxArraySize = limits.maxArraySize;
+	if (limits.maxObjectSize) maxObjectSize = limits.maxObjectSize;
 }
 
 export const mult10 = new Array(147) // this is a table matching binary exponents to the multiplier to determine significant digit rounding
