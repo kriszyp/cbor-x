@@ -14,10 +14,13 @@ const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
-export let MAX_LIMITS = {
-	MAX_ARRAY_SIZE: 1000000,
-	MAX_OBJECT_ITEMS: 1000000,
-}
+let maxArraySize = 112810000 // This is the maximum array size in V8. We would potentially detect and set it higher
+// for JSC, but this is pretty large and should be sufficient for most use cases
+let maxMapSize = 16810000 // JavaScript has a fixed maximum map size of about 16710000, but JS itself enforces this,
+// so we don't need to
+
+let maxObjectSize = 16710000; // This is the maximum number of keys in a Map. It takes over a minute to create this
+// many keys in an object, so also probably a reasonable choice there.
 let strings = EMPTY_ARRAY
 let stringPosition = 0
 let currentDecoder = {}
@@ -298,9 +301,7 @@ export function read() {
 						let array = []
 						let value, i = 0
 						while ((value = read()) != STOP_CODE) {
-							if( i >= MAX_LIMITS.MAX_ARRAY_SIZE) {
-								throw new Error(`Length exceed ${MAX_LIMITS.MAX_ARRAY_SIZE}`);
-							}
+							if (i >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 							array[i++] = value
 						}
 						return majorType == 4 ? array : majorType == 3 ? array.join('') : Buffer.concat(array)
@@ -311,18 +312,14 @@ export function read() {
 							let i = 0;
 							if (currentDecoder.keyMap) {
 								while((key = read()) != STOP_CODE) {
-									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
-										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
-									}
-									object[safeKey(currentDecoder.decodeKey(key))] = read(); i++;
+									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
+									object[safeKey(currentDecoder.decodeKey(key))] = read()
 								}
 							}
 							else {
 								while ((key = read()) != STOP_CODE) {
-									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
-										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
-									}
-									object[safeKey(key)] = read(); i++;
+									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
+									object[safeKey(key)] = read()
 								}
 							}
 							return object
@@ -335,19 +332,19 @@ export function read() {
 							if (currentDecoder.keyMap) {
 								let i = 0;
 								while((key = read()) != STOP_CODE) {
-									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
-										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									if (i++ >= maxMapSize) {
+										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
-									map.set(currentDecoder.decodeKey(key), read()); i++;
+									map.set(currentDecoder.decodeKey(key), read())
 								}
 							}
 							else {
 								let i = 0;
 								while ((key = read()) != STOP_CODE) {
-									if( i >= MAX_LIMITS.MAX_OBJECT_ITEMS ) {
-										throw new Error(`Map items exceed ${MAX_LIMITS.MAX_OBJECT_ITEMS}`);
+									if (i++ >= maxMapSize) {
+										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
-									map.set(key, read()); i++;
+									map.set(key, read())
 								}
 							}
 							return map
@@ -380,12 +377,14 @@ export function read() {
 			}
 			return readFixedString(token)
 		case 4: // array
+			if (token >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 			let array = new Array(token)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
 			for (let i = 0; i < token; i++) array[i] = read()
 			return array
 		case 5: // map
+			if (token >= maxMapSize) throw new Error(`Map size exceeds ${maxArraySize}`)
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
@@ -1275,7 +1274,8 @@ export function addExtension(extension) {
 }
 
 export function setMaxLimits(limits) {
-	MAX_LIMITS = limits;
+	if (limits.maxMapSize) maxMapSize = limits.maxMapSize;
+	if (limits.maxArraySize) maxArraySize = limits.maxArraySize;
 }
 
 export const mult10 = new Array(147) // this is a table matching binary exponents to the multiplier to determine significant digit rounding

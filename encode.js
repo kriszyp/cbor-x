@@ -633,7 +633,7 @@ export class Encoder extends Decoder {
 			let objectOffset = position - start
 			position += 2
 			let size = 0
-			if (encoder.keyMap) { 
+			if (encoder.keyMap) {
 				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 					encode(encoder.encodeKey(key))
 					encode(object[key])
