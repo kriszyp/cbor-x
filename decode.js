@@ -486,6 +486,7 @@ export function read() {
 }
 const validName = /^[a-zA-Z_$][a-zA-Z\d_$]*$/
 function createStructureReader(structure) {
+	if (!structure) throw new Error('Structure is required in record definition');
 	function readObject() {
 		// get the array size from the header
 		let length = src[position++]
