@@ -585,7 +585,19 @@ export class Encoder extends Decoder {
 						target[position++] = 0xfb
 						targetView.setFloat64(position, Number(value))
 					} else {
-						throw new RangeError(value + ' was too large to fit in CBOR 64-bit integer format, set largeBigIntToFloat to convert to float-64')
+						if (value >= BigInt(0))
+							target[position++] = 0xc2 // tag 2
+						else {
+							target[position++] = 0xc3 // tag 2
+							value = BigInt(-1) - value;
+						}
+						let bytes = [];
+						while (value) {
+							bytes.push(Number(value & BigInt(0xff)));
+							value >>= BigInt(8);
+						}
+						writeBuffer(new Uint8Array(bytes.reverse()), makeRoom);
+						return;
 					}
 				}
 				position += 8

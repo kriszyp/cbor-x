@@ -679,23 +679,27 @@ suite('CBOR basic tests', function(){
 		var data = {
 			bigintSmall: 352n,
 			bigintSmallNegative: -333335252n,
-			bigintBig: 2n**64n - 1n, // biggest possible
+			bigintBig: 2n**64n - 1n, // biggest 64-bit possible
 			bigintBigNegative: -(2n**63n), // largest negative
 			mixedWithNormal: 44,
 		}
 		var serialized = encode(data)
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
-		var tooBigInt = {
-			tooBig: 2n**66n
+		var evenBiggerInt = {
+			big: 2n**66n,
+			bigger: 53285732853728573289573289573289573289583725892358732859532n,
+			negBig: -93025879203578903275903285903285903289502n,
 		}
-		assert.throws(function(){ serialized = encode(tooBigInt) })
+		var serialized = encode(evenBiggerInt)
+		var deserialized = decode(serialized)
+		assert.deepEqual(deserialized, evenBiggerInt)
 		let encoder = new Encoder({
 			largeBigIntToFloat: true
 		})
-		serialized = encoder.encode(tooBigInt)
+		serialized = encoder.encode(evenBiggerInt)
 		deserialized = decode(serialized)
-		assert.isTrue(deserialized.tooBig > 2n**65n)
+		assert.isTrue(deserialized.bigger > 2n**65n)
 	})
 
 	test('buffers', function() {

@@ -923,7 +923,7 @@ currentExtensions[2] = (buffer) => {
 	// bigint extension
 	let value = BigInt(0)
 	for (let i = 0, l = buffer.byteLength; i < l; i++) {
-		value = BigInt(buffer[i]) + value << BigInt(8)
+		value = BigInt(buffer[i]) + (value << BigInt(8))
 	}
 	return value
 }
