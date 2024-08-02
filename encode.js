@@ -4,9 +4,14 @@ try {
 	textEncoder = new TextEncoder()
 } catch (error) {}
 let extensions, extensionClasses
+
+const isConstructor = (func) => {
+    return typeof func === 'function' && !!func.prototype && func.prototype.constructor === func;
+}
+
 const Buffer = typeof globalThis === 'object' && globalThis.Buffer;
 const hasNodeBuffer = typeof Buffer !== 'undefined'
-const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
+const ByteArrayAllocate = hasNodeBuffer ? (isConstructor(Buffer.allocUnsafeSlow) ? Buffer.allocUnsafeSlow : Buffer) : Uint8Array
 const ByteArray = hasNodeBuffer ? Buffer : Uint8Array
 const MAX_STRUCTURES = 0x100
 const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000
