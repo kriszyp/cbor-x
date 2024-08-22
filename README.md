@@ -166,7 +166,7 @@ The principle driver for this feature is to support `application/senml+cbor`cont
 Records are also supported in conjunction with keyMaps, but these are disabled by default when keyMaps are specified as use of the two features does not introduce any additional compression efficiency unless that the data arrays are quite large (> 10 items).
 
 ```JavaScript
-import { Encoder } from 'cbor-x'
+import { Decoder, Encoder } from 'cbor-x'
 const data = [ 
 	{ bn: '/3303/0/5700', bt: 1278887, v: 35.5 },
 	{ t: 10, v: 34 },
@@ -183,7 +183,8 @@ let senmlBuff = senmlCbor.encode(data)
 let basicBuff = basicCbor.encode(data)
 console.log('Senml CBOR size:', senmlBuff.length) // 77
 console.log('Basic CBOR size:', basicBuff.length) // 90
-assert.deepEqual(senmlEncoder.decode(senmlBuff), data)
+let senmlDecoder = new Decoder({ keyMap: senmlKeys }); 
+assert.deepEqual(senmlDecoder.decode(senmlBuff), data)
 
 ```
 
