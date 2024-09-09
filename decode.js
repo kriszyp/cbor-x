@@ -545,7 +545,9 @@ function safeKey(key) {
 	if (typeof key === 'number' || typeof key === 'boolean' || typeof key === 'bigint') return key.toString();
 	if (key == null) return key + '';
 	// protect against expensive (DoS) string conversions
-	throw new Error('Invalid property name type ' + typeof key);
+	let error = new Error('Invalid property name type ' + typeof key);
+	if (typeof key === 'object') error.incomplete = true;
+	throw error;
 }
 
 let readFixedString = readStringJS
