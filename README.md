@@ -89,22 +89,21 @@ import { decode } from 'cbor-x/decode' // if you only need to decode
 ```
 
 ## Structured Cloning
-You can also use cbor-x for [structured cloning](https://html.spec.whatwg.org/multipage/structured-data.html). By enabling the `structuredClone` option, you can include references to other objects or cyclic references, and object identity will be preserved. Structured cloning also enables preserving certain typed objects like `Error`, `Set`, `RegExp` and TypedArray instances, using [registered CBOR tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml). For example:
+You can also use cbor-x for [structured cloning](https://html.spec.whatwg.org/multipage/structured-data.html). By enabling the `structuredClone` option, you can include references to other objects or cyclic references, and object identity will be preserved.For example:
 ```JavaScript
 let obj = {
-	set: new Set(['a', 'b']),
-	regular: /a\spattern/
 };
 obj.self = obj;
 let encoder = new Encoder({ structuredClone: true });
 let serialized = encoder.encode(obj);
 let copy = encoder.decode(serialized);
 copy.self === copy // true
-copy.set.has('a') // true
 
 ```
 
 This option is disabled by default because reference checking degrades performance (by about 25-30%). (Note this implementation doesn't serialize every class/type specified in the HTML specification since not all of them make sense for storing across platforms.)
+
+cbor-x also preserves certain typed objects like `Error`, `Set`, `RegExp` and TypedArray instances, using [registered CBOR tag extensions](https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml). This works with or without structured cloning enabled.
 
 ## Record / Object Structures
 There is a critical difference between maps (or dictionaries) that hold an arbitrary set of keys and values (JavaScript `Map` is designed for these), and records or object structures that have a well-defined set of fields. Typical JS objects/records may have many instances re(use) the same structure. By using the record extension, this distinction is preserved in CBOR and the encoding can reuse structures and not only provides better type preservation, but yield much more compact encodings and increase decoding performance by 2-3x. Cbor-x automatically generates record definitions that are reused and referenced by objects with the same structure. Records use CBOR's tags to align well CBOR's tag/extension mechanism. There are a number of ways to use this to our advantage. For large object structures with repeating nested objects with similar structures, simply serializing with the record extension can yield significant benefits. To use the record structures extension, we create a new `Encoder` instance. By default a new `Encoder` instance will have the record extension enabled:
