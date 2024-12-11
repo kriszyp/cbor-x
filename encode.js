@@ -39,6 +39,7 @@ export class Encoder extends Decoder {
 			} : false
 
 		let encoder = this
+		const sortMaps = options.sortMaps || false
 		let hasSharedStructures = options.structures || options.saveStructures
 		let maxSharedStructures = options.maxSharedStructures
 		if (maxSharedStructures == null)
@@ -507,10 +508,12 @@ export class Encoder extends Decoder {
 								encode(encoder.encodeKey(key))
 								encode(entryValue)
 							} 
-						} else { 
-							for (let [ key, entryValue ] of value) {
+						} else {
+							const keys = Object.keys(value)
+							if (this.sortMaps) keys.sort(lexSortFn)
+							for (let key of keys) {
 								encode(key) 
-								encode(entryValue)
+								encode(value[key])
 							} 	
 						}
 					} else {
@@ -611,7 +614,7 @@ export class Encoder extends Decoder {
 		const writeObject = this.useRecords === false ? this.variableMapSize ? (object) => {
 			// this method is slightly slower, but generates "preferred serialization" (optimally small for smaller objects)
 			let keys = Object.keys(object)
-			let vals = Object.values(object)
+			if (this.sortMaps) keys.sort(lexSortFn)
 			let length = keys.length
 			if (length < 0x18) {
 				target[position++] = 0xa0 | length
@@ -627,16 +630,15 @@ export class Encoder extends Decoder {
 				targetView.setUint32(position, length)
 				position += 4
 			}
-			let key
 			if (encoder.keyMap) { 
 				for (let i = 0; i < length; i++) {
 					encode(encoder.encodeKey(keys[i]))
-					encode(vals[i])
+					encode(object[keys[i]])
 				}
 			} else {
 				for (let i = 0; i < length; i++) {
 					encode(keys[i])
-					encode(vals[i])
+					encode(object[keys[i]])
 				}
 			}
 		} :
@@ -651,8 +653,10 @@ export class Encoder extends Decoder {
 					encode(object[key])
 					size++
 				}
-			} else { 
-				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
+			} else {
+				const keys = Object.keys(object)
+				if (this.sortMaps) keys.sort(lexSortFn)
+				for (let key of keys) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 						encode(key)
 						encode(object[key])
 					size++
@@ -680,7 +684,9 @@ export class Encoder extends Decoder {
 					transition = nextTransition
 				}				
 			} else {
-				for (let key in object) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
+				const keys = Object.keys(object)
+				if (this.sortMaps) keys.sort(lexSortFn)
+				for (let key of keys) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 					nextTransition = transition[key]
 					if (!nextTransition) {
 						if (transition[RECORD_SYMBOL] & 0x100000) {// this indicates it is a brancheable/extendable terminal node, so we will use this record id and extend it
@@ -795,7 +801,9 @@ export class Encoder extends Decoder {
 					writeObject(object, true); // write the record identifier
 				else
 					writeEntityLength(Object.keys(object).length, 0xa0);
-				for (let key in object) {
+				let keys = Object.keys(object)
+				if (this.sortMaps) keys.sort(lexSortFn)
+				for (let key of keys) {
 					let value = object[key];
 					if (!useRecords) encode(key);
 					if (value && typeof value === 'object') {
@@ -1227,5 +1235,8 @@ export const { NEVER, ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } = FLOAT32_OPTIONS
 export const REUSE_BUFFER_MODE = 512
 export const RESET_BUFFER_MODE = 1024
 export const THROW_ON_ITERABLE = 2048
-
-
+const lexSortFn = (a, b) => {
+	if (a.length < b.length) return -1
+	if (a.length > b.length) return 1
+	return a < b ? -1 : 1
+}
