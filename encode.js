@@ -509,12 +509,11 @@ export class Encoder extends Decoder {
 								encode(entryValue)
 							} 
 						} else {
-							const keys = Object.keys(value)
-							if (this.sortMaps) keys.sort(lexSortFn)
+							const keys = Array.from(value.keys()).sort()
 							for (let key of keys) {
 								encode(key) 
-								encode(value[key])
-							} 	
+								encode(value.get(key))
+							}
 						}
 					} else {
 						for (let i = 0, l = extensions.length; i < l; i++) {
