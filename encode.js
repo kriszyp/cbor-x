@@ -509,7 +509,7 @@ export class Encoder extends Decoder {
 								encode(entryValue)
 							} 
 						} else {
-							const keys = Array.from(value.keys()).sort()
+							const keys = Array.from(value.keys()).sort(lexSortFn)
 							for (let key of keys) {
 								encode(key) 
 								encode(value.get(key))
