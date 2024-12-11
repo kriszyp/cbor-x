@@ -614,7 +614,7 @@ export class Encoder extends Decoder {
 		const writeObject = this.useRecords === false ? this.variableMapSize ? (object) => {
 			// this method is slightly slower, but generates "preferred serialization" (optimally small for smaller objects)
 			let keys = Object.keys(object)
-			if (this.sortMaps) keys.sort(lexSortFn)
+			if (sortMaps) keys.sort(lexSortFn)
 			let length = keys.length
 			if (length < 0x18) {
 				target[position++] = 0xa0 | length
@@ -655,7 +655,7 @@ export class Encoder extends Decoder {
 				}
 			} else {
 				const keys = Object.keys(object)
-				if (this.sortMaps) keys.sort(lexSortFn)
+				if (sortMaps) keys.sort(lexSortFn)
 				for (let key of keys) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 						encode(key)
 						encode(object[key])
@@ -685,7 +685,7 @@ export class Encoder extends Decoder {
 				}				
 			} else {
 				const keys = Object.keys(object)
-				if (this.sortMaps) keys.sort(lexSortFn)
+				if (sortMaps) keys.sort(lexSortFn)
 				for (let key of keys) if (typeof object.hasOwnProperty !== 'function' || object.hasOwnProperty(key)) {
 					nextTransition = transition[key]
 					if (!nextTransition) {
@@ -802,7 +802,7 @@ export class Encoder extends Decoder {
 				else
 					writeEntityLength(Object.keys(object).length, 0xa0);
 				let keys = Object.keys(object)
-				if (this.sortMaps) keys.sort(lexSortFn)
+				if (sortMaps) keys.sort(lexSortFn)
 				for (let key of keys) {
 					let value = object[key];
 					if (!useRecords) encode(key);
