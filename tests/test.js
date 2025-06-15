@@ -654,7 +654,12 @@ suite('CBOR basic tests', function(){
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
 	})
-
+	test('numbers are compact', function(){
+		assert.equal(encode(-256).length, 2)
+		let encoding = encode(-4294967296)
+		assert.equal(encoding.length, 5)
+		assert.equal(decode(encoding), -4294967296)
+	})
 	test('encode ArrayBuffer', function() {
 		let ua = new Uint8Array([3, 4, 5]);
 		let encoded = encode(ua.buffer);

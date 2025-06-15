@@ -413,7 +413,7 @@ export class Encoder extends Decoder {
 						targetView.setUint32(position, value)
 						position += 4
 					}
-				} else if (!this.alwaysUseFloat && value >> 0 === value) { // negative integer
+				} else if (!this.alwaysUseFloat && value >> 0 === value) { // negative integer, 31-bit or less
 					if (value >= -0x18) {
 						target[position++] = 0x1f - value
 					} else if (value >= -0x100) {
@@ -428,6 +428,11 @@ export class Encoder extends Decoder {
 						targetView.setUint32(position, ~value)
 						position += 4
 					}
+				} else if (!this.alwaysUseFloat && value < 0 && value >= -0x100000000 && Math.floor(value) === value) {
+					// negative integer, 32-bit or less
+					target[position++] = 0x3a
+					targetView.setUint32(position, -1 - value)
+					position += 4
 				} else {
 					let useFloat32
 					if ((useFloat32 = this.useFloat32) > 0 && value < 0x100000000 && value >= -0x80000000) {
