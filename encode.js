@@ -452,6 +452,18 @@ export class Encoder extends Decoder {
 					position += 8
 				}
 			} else if (type === 'object') {
+				if( value instanceof String){
+					if (value._cbor_indef && this.preserveIndefiniteLength){
+						target[position++]= 0x7f
+						value._cbor_indef.forEach(str=>{
+							encode(str)
+						})
+						target[position++]=0xff
+					}else{
+						encode(String(value))
+					}
+					return
+				}
 				if (!value)
 					target[position++] = 0xf6
 				else {
@@ -476,16 +488,26 @@ export class Encoder extends Decoder {
 					if (constructor === Object) {
 						writeObject(value)
 					} else if (constructor === Array) {
+						const write=()=>{
+							for (let i = 0; i < length; i++) {
+								encode(value[i])
+							}
+						}
 						length = value.length
+						if (value._cbor_indef && this.preserveIndefiniteLength){
+							target[position++]=0x9f
+							write()
+							target[position++]= 0xff
+							return
+						}
 						if (length < 0x18) {
 							target[position++] = 0x80 | length
 						} else {
 							writeArrayHeader(length)
 						}
-						for (let i = 0; i < length; i++) {
-							encode(value[i])
-						}
+						write()
 					} else if (constructor === Map) {
+
 						if (this.mapsAsObjects ? this.useTag259ForMaps !== false : this.useTag259ForMaps) {
 							// use Tag 259 (https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec--explicit-maps.md) for maps if the user wants it that way
 							target[position++] = 0xd9
@@ -493,7 +515,11 @@ export class Encoder extends Decoder {
 							target[position++] = 3
 						}
 						length = value.size
-						if (length < 0x18) {
+
+						if(encoder.preserveIndefiniteLength &&  value._cbor_indef){
+							target[position++]=0xbf
+						}
+						else if (length < 0x18) {
 							target[position++] = 0xa0 | length
 						} else if (length < 0x100) {
 							target[position++] = 0xb8
@@ -518,6 +544,10 @@ export class Encoder extends Decoder {
 								encode(entryValue)
 							} 	
 						}
+						if(encoder.preserveIndefiniteLength &&  value._cbor_indef){
+							target[position++]=0xff
+						}
+
 					} else {
 						for (let i = 0, l = extensions.length; i < l; i++) {
 							let extensionClass = extensionClasses[i]
@@ -993,8 +1023,8 @@ function isBlob(object) {
 	return tag === 'Blob' || tag === 'File';
 }
 function findRepetitiveStrings(value, packedValues) {
-	switch(typeof value) {
-		case 'string':
+	const valType = typeof value
+	if (valType == 'string' || value instanceof String){
 			if (value.length > 3) {
 				if (packedValues.objectMap[value] > -1 || packedValues.values.length >= packedValues.maxValues)
 					return
@@ -1018,9 +1048,8 @@ function findRepetitiveStrings(value, packedValues) {
 					}
 				}
 			}
-			break
-		case 'object':
-			if (value) {
+		}
+		else if (valType === 'object'){
 				if (value instanceof Array) {
 					for (let i = 0, l = value.length; i < l; i++) {
 						findRepetitiveStrings(value[i], packedValues)
@@ -1036,10 +1065,9 @@ function findRepetitiveStrings(value, packedValues) {
 						}
 					}
 				}
-			}
-			break
-		case 'function': console.log(value)
-	}
+		}
+		else if(valType ==='function') 
+			console.log(value)
 }
 const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
 extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer,
@@ -1100,7 +1128,7 @@ extensions = [{ // Date
 		} // else no tag
 	},
 	encode(typedArray, encode, makeRoom) {
-		writeBuffer(typedArray, makeRoom)
+		writeBuffer.bind(this)(typedArray, makeRoom)
 	}
 },
 	typedArrayEncoder(68, 1),
@@ -1157,6 +1185,14 @@ function typedArrayEncoder(tag, size) {
 }
 function writeBuffer(buffer, makeRoom) {
 	let length = buffer.byteLength
+	if(buffer._cbor_indef && this && this.preserveIndefiniteLength){
+		target[position++]= 0x5f
+		buffer._cbor_indef.forEach(buf=>{
+			writeBuffer(buf,makeRoom)
+		})
+		target[position++] = 0xff
+		return;
+	}
 	if (length < 0x18) {
 		target[position++] = 0x40 + length
 	} else if (length < 0x100) {

@@ -25,6 +25,8 @@ function tryRequire(module) {
 var assert = chai.assert
 
 var Encoder = CBOR.Encoder
+var Decoder = CBOR.Encoder
+
 var EncoderStream = CBOR.EncoderStream
 var DecoderStream = CBOR.DecoderStream
 var decode = CBOR.decode
@@ -46,6 +48,10 @@ try {
 } catch (error) {}
 
 var ITERATIONS = 4000
+
+if(process.env.LOG_LEVEL !=='DEBUG' ){
+	console.debug=()=>{}
+}
 
 suite('CBOR basic tests', function(){
 	test('encode/decode with keyMaps (basic)', function() {
@@ -750,6 +756,30 @@ suite('CBOR basic tests', function(){
 		var serialized = encode(data)
 		var deserialized = decode(serialized)
 		assert.deepEqual(deserialized, data)
+	})
+	test ('re-encode indefinite length',()=>{
+		const decoder=new Decoder({preserveIndefiniteLength: true})
+		const encoder=new Encoder({preserveIndefiniteLength: true})
+
+
+		const data=Buffer.from('9F81007F6563626F72786563626F7278FF5F43ABCDEFFF7F6563626F7278FFBF6563626F7278F5FFFF','hex')
+		console.debug("re-encode indefinite length:initial   ",data.toString('hex'))
+
+		const decoded =  decoder.decode(data)
+		console.debug("re-encode indefinite length:decoded   ",decoded)
+
+		const reEncoded= encoder.encode(decoded)
+		console.debug("re-encode indefinite length:re-encoded",reEncoded.toString('hex'))
+
+		const defaultEncoded = CBOR.encode(decoded)
+		console.debug("re-encode not preserved:   encoded    ",defaultEncoded.toString('hex'))
+		assert.equal(defaultEncoded.toString('hex'),'8581006a63626f727863626f727843abcdef6563626f7278d90103a16563626f7278f5')
+
+
+		const reDecoded= decoder.decode(reEncoded)
+		console.debug("re-encode indefinite length:re-decoded",reDecoded)
+
+		assert.equal(data.toString('hex'), encoder.encode(reDecoded).toString('hex'))
 	})
 	test('decodeMultiple', () => {
 		let values = CBOR.decodeMultiple(new Uint8Array([1, 2, 3, 4]))
