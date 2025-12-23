@@ -3,7 +3,6 @@ let textEncoder
 try {
 	textEncoder = new TextEncoder()
 } catch (error) {}
-let extensions, extensionClasses
 const Buffer = typeof globalThis === 'object' && globalThis.Buffer;
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
@@ -1230,9 +1229,9 @@ export function addExtension(extension) {
 	}
 	decodeAddExtension(extension)
 }
-export const encode = defaultEncoder.encode
-export const encodeAsIterable = defaultEncoder.encodeAsIterable
-export const encodeAsAsyncIterable = defaultEncoder.encodeAsAsyncIterable
+export const encode = defaultEncoder.encode.bind(defaultEncoder)
+export const encodeAsIterable = defaultEncoder.encodeAsIterable.bind(defaultEncoder)
+export const encodeAsAsyncIterable = defaultEncoder.encodeAsAsyncIterable.bind(defaultEncoder)
 export { FLOAT32_OPTIONS } from './decode.js'
 import { FLOAT32_OPTIONS } from './decode.js'
 export const { NEVER, ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } = FLOAT32_OPTIONS

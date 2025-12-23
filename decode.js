@@ -124,6 +124,9 @@ export class Decoder {
 	}
 
 	decode(source, end) {
+		if (!(this instanceof Decoder)) {
+			throw new TypeError("Must be called on Decoder instance");
+		}
 		if (src) {
 			// re-entrant execution, save the state and restore it after we do this decode
 			return saveState(() => {
@@ -151,23 +154,17 @@ export class Decoder {
 				throw error
 			throw new Error('Source must be a Uint8Array or Buffer but was a ' + ((source && typeof source == 'object') ? source.constructor.name : typeof source))
 		}
-		if (this instanceof Decoder) {
-			currentDecoder = this
-			packedValues = this.sharedValues &&
-				(this.pack ? new Array(this.maxPrivatePackedValues || 16).concat(this.sharedValues) :
-				this.sharedValues)
-			if (this.structures) {
-				currentStructures = this.structures
-				return checkedRead()
-			} else if (!currentStructures || currentStructures.length > 0) {
-				currentStructures = []
-			}
-		} else {
-			currentDecoder = defaultOptions
-			if (!currentStructures || currentStructures.length > 0)
-				currentStructures = []
-			packedValues = null
+		currentDecoder = this
+		packedValues = this.sharedValues &&
+			(this.pack ? new Array(this.maxPrivatePackedValues || 16).concat(this.sharedValues) :
+			this.sharedValues)
+		if (this.structures) {
+			currentStructures = this.structures
+			return checkedRead()
+		} else if (!currentStructures || currentStructures.length > 0) {
+			currentStructures = []
 		}
+
 		return checkedRead()
 	}
 	decodeMultiple(source, forEach) {
@@ -451,6 +448,7 @@ export function read() {
 					}
 				}
 			}
+
 			let extension = currentDecoder.currentExtensions[token]
 			if (extension) {
 				if (extension.handlesRead)
@@ -1289,8 +1287,8 @@ export const mult10 = new Array(147) // this is a table matching binary exponent
 for (let i = 0; i < 256; i++) {
 	mult10[i] = +('1e' + Math.floor(45.15 - i * 0.30103))
 }
-export const decode = defaultDecoder.decode
-export const decodeMultiple = defaultDecoder.decodeMultiple
+export const decode = defaultDecoder.decode.bind(defaultDecoder)
+export const decodeMultiple = defaultDecoder.decodeMultiple.bind(defaultDecoder)
 export const FLOAT32_OPTIONS = {
 	NEVER: 0,
 	ALWAYS: 1,
