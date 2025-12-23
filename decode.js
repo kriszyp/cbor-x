@@ -30,7 +30,7 @@ let srcStringStart = 0
 let srcStringEnd = 0
 let bundledStrings
 let referenceMap
-let currentExtensions = []
+const defaultExtensions = []
 let currentExtensionRanges = []
 let packedValues
 let dataView
@@ -70,7 +70,11 @@ export class Decoder {
 				for (let [k,v] of Object.entries(options.keyMap)) this.mapKey.set(v,k)
 			}
 		}
-		Object.assign(this, options)
+		Object.assign(this, options);
+		this.currentExtensions = Object.assign({}, defaultExtensions);
+	}
+	addExtension(extension) {
+		this.currentExtensions[extension.tag] = extension.decode
 	}
 	/*
 	decodeKey(key) {
@@ -447,7 +451,7 @@ export function read() {
 					}
 				}
 			}
-			let extension = currentExtensions[token]
+			let extension = currentDecoder.currentExtensions[token]
 			if (extension) {
 				if (extension.handlesRead)
 					return extension(read)
@@ -807,8 +811,8 @@ function readBin(length) {
 }
 function readExt(length) {
 	let type = src[position++]
-	if (currentExtensions[type]) {
-		return currentExtensions[type](src.subarray(position, position += length))
+	if (currentDecoder.currentExtensions[type]) {
+		return currentDecoder.currentExtensions[type](src.subarray(position, position += length))
 	}
 	else
 		throw new Error('Unknown extension type ' + type)
@@ -910,17 +914,17 @@ export class Tag {
 	}
 }
 
-currentExtensions[0] = (dateString) => {
+defaultExtensions[0] = (dateString) => {
 	// string date extension
 	return new Date(dateString)
 }
 
-currentExtensions[1] = (epochSec) => {
+defaultExtensions[1] = (epochSec) => {
 	// numeric date extension
 	return new Date(Math.round(epochSec * 1000))
 }
 
-currentExtensions[2] = (buffer) => {
+defaultExtensions[2] = (buffer) => {
 	// bigint extension
 	let value = BigInt(0)
 	for (let i = 0, l = buffer.byteLength; i < l; i++) {
@@ -929,16 +933,16 @@ currentExtensions[2] = (buffer) => {
 	return value
 }
 
-currentExtensions[3] = (buffer) => {
+defaultExtensions[3] = (buffer) => {
 	// negative bigint extension
-	return BigInt(-1) - currentExtensions[2](buffer)
+	return BigInt(-1) - defaultExtensions[2](buffer)
 }
-currentExtensions[4] = (fraction) => {
+defaultExtensions[4] = (fraction) => {
 	// best to reparse to maintain accuracy
 	return +(fraction[1] + 'e' + fraction[0])
 }
 
-currentExtensions[5] = (fraction) => {
+defaultExtensions[5] = (fraction) => {
 	// probably not sufficiently accurate
 	return fraction[1] * Math.exp(fraction[0] * Math.log(2))
 }
@@ -954,7 +958,7 @@ const recordDefinition = (id, structure) => {
 
 	structure.read = createStructureReader(structure)
 }
-currentExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
+defaultExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
 	let length = data.length
 	let structure = data[1]
 	recordDefinition(data[0], structure)
@@ -965,18 +969,18 @@ currentExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
 	}
 	return object
 }
-currentExtensions[14] = (value) => {
+defaultExtensions[14] = (value) => {
 	if (bundledStrings)
 		return bundledStrings[0].slice(bundledStrings.position0, bundledStrings.position0 += value)
 	return new Tag(value, 14)
 }
-currentExtensions[15] = (value) => {
+defaultExtensions[15] = (value) => {
 	if (bundledStrings)
 		return bundledStrings[1].slice(bundledStrings.position1, bundledStrings.position1 += value)
 	return new Tag(value, 15)
 }
 let glbl = { Error, RegExp }
-currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
+defaultExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
 const packedTable = (read) => {
@@ -998,9 +1002,9 @@ const packedTable = (read) => {
 	return read() // read the rump
 }
 packedTable.handlesRead = true
-currentExtensions[51] = packedTable
+defaultExtensions[51] = packedTable
 
-currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
+defaultExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 	if (!packedValues) {
 		if (currentDecoder.getShared)
 			loadShared()
@@ -1019,10 +1023,10 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 // the real thing would need to implemennt more logic to populate the stringRefs table and
 // maintain a stack of stringRef "namespaces".
 //
-// currentExtensions[25] = (id) => {
+// defaultExtensions[25] = (id) => {
 // 	return stringRefs[id]
 // }
-// currentExtensions[256] = (read) => {
+// defaultExtensions[256] = (read) => {
 // 	stringRefs = []
 // 	try {
 // 		return read()
@@ -1030,9 +1034,9 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 // 		stringRefs = null
 // 	}
 // }
-// currentExtensions[256].handlesRead = true
+// defaultExtensions[256].handlesRead = true
 
-currentExtensions[28] = (read) => { 
+defaultExtensions[28] = (read) => {
 	// shareable http://cbor.schmorp.de/value-sharing (for structured clones)
 	if (!referenceMap) {
 		referenceMap = new Map()
@@ -1069,17 +1073,17 @@ currentExtensions[28] = (read) => {
 	refEntry.target = targetProperties // the placeholder wasn't used, replace with the deserialized one
 	return targetProperties // no cycle, can just use the returned read object
 }
-currentExtensions[28].handlesRead = true
+defaultExtensions[28].handlesRead = true
 
-currentExtensions[29] = (id) => {
+defaultExtensions[29] = (id) => {
 	// sharedref http://cbor.schmorp.de/value-sharing (for structured clones)
 	let refEntry = referenceMap.get(id)
 	refEntry.used = true
 	return refEntry.target
 }
 
-currentExtensions[258] = (array) => new Set(array); // https://github.com/input-output-hk/cbor-sets-spec/blob/master/CBOR_SETS.md
-(currentExtensions[259] = (read) => {
+defaultExtensions[258] = (array) => new Set(array); // https://github.com/input-output-hk/cbor-sets-spec/blob/master/CBOR_SETS.md
+(defaultExtensions[259] = (read) => {
 	// https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec
 	// for decoding as a standard Map
 	if (currentDecoder.mapsAsObjects) {
@@ -1148,7 +1152,7 @@ function registerTypedArray(TypedArray, tag) {
 		if (!littleEndian && bytesPerElement == 1)
 			continue
 		let sizeShift = bytesPerElement == 2 ? 1 : bytesPerElement == 4 ? 2 : bytesPerElement == 8 ? 3 : 0
-		currentExtensions[littleEndian ? tag : (tag - 4)] = (bytesPerElement == 1 || littleEndian == isLittleEndianMachine) ? (buffer) => {
+		defaultExtensions[littleEndian ? tag : (tag - 4)] = (bytesPerElement == 1 || littleEndian == isLittleEndianMachine) ? (buffer) => {
 			if (!TypedArray)
 				throw new Error('Could not find typed array for code ' + tag)
 			if (!currentDecoder.copyBuffers) {
@@ -1270,8 +1274,9 @@ export function clearSource() {
 	currentStructures = null
 }
 
+let defaultDecoder = new Decoder({ useRecords: false })
 export function addExtension(extension) {
-	currentExtensions[extension.tag] = extension.decode
+	defaultDecoder.addExtension(extension)
 }
 
 export function setSizeLimits(limits) {
@@ -1284,7 +1289,6 @@ export const mult10 = new Array(147) // this is a table matching binary exponent
 for (let i = 0; i < 256; i++) {
 	mult10[i] = +('1e' + Math.floor(45.15 - i * 0.30103))
 }
-let defaultDecoder = new Decoder({ useRecords: false })
 export const decode = defaultDecoder.decode
 export const decodeMultiple = defaultDecoder.decodeMultiple
 export const FLOAT32_OPTIONS = {

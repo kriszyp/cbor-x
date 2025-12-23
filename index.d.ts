@@ -46,6 +46,7 @@ export class Decoder {
 	constructor(options?: Options)
 	decode(messagePack: Buffer | Uint8Array): any
 	decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
+	addExtension<T, R>(extension: Extension<T, R>): void
 }
 export function setMaxLimits(options: SizeLimitOptions): void
 export function decode(messagePack: Buffer | Uint8Array): any
@@ -57,6 +58,7 @@ export let isNativeAccelerationEnabled: boolean
 
 export class Encoder extends Decoder {
 	encode(value: any): Buffer
+	addExtension<T, R>(extension: Extension<T, R>): void
 }
 export function encode(value: any): Buffer
 export function encodeAsIterable(value: any): Iterable<Buffer | Blob | AsyncIterable<Buffer>>
