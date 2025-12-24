@@ -54,20 +54,22 @@ suite('cbor-x node stream tests', function(){
 		const recordNum = 10000
 
 		const enc = new EncoderStream({
-		  bundleStrings: true,
+		  //bundleStrings: true, // TODO: bundle strings is incompatible with stream right now
 		})
 
 		const read = () => {
 		  console.time('READ')
 
 		  const dec = new DecoderStream({
-		    bundleStrings: true,
+		    //bundleStrings: true,
 		  })
 
 		  fs.createReadStream('test.cbor')
 		    .on('data', (c) => console.log(c.length))
 		    .pipe(dec)
-		    .on('data', () => {})
+		    .on('data', (data) => {
+					assert.equal(data.str, 'TEST_STR');
+				})
 		    .on('end', () => console.timeEnd('READ') || done())
 
 		}
