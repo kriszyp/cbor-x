@@ -474,6 +474,9 @@ export class Encoder extends Decoder {
 					}
 					let constructor = value.constructor
 					if (constructor === Object) {
+						if (this.skipFunction === true) {
+							value = Object.fromEntries([...Object.keys(value).filter(x => typeof value[x] !== "function").map(x => [x, value[x]])]);
+						}
 						writeObject(value)
 					} else if (constructor === Array) {
 						length = value.length

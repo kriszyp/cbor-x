@@ -213,6 +213,7 @@ The following options properties can be provided to the Encoder or Decoder const
 * `useTag259ForMaps` - This flag indicates if [tag 259 (explicit maps)](https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec--explicit-maps.md) should be used to encode JS `Map`s. When using records is enabled, this is disabled by default, since plain objects are encoded with record structures and unambigiously differentiated from `Map`s, which are encoded as CBOR maps. Without using records, this enabled by default and is necessary to distinguish plain objects from `Map`s (but can be disabled by setting this to `false`).
 * `tagUint8Array` - Indicates if tag 64 should be used for `Uint8Array`s. 
 * `int64AsNumber` - This will decode uint64 and int64 numbers as standard JS numbers rather than as bigint numbers.
+* `skipFunction`  - This skip functions in encode object.
 
 ### 32-bit Float Options
 By default all non-integer numbers are serialized as 64-bit float (double). This is fast, and ensures maximum precision. However, often real-world data doesn't not need 64-bits of precision, and using 32-bit encoding can be much more space efficient. There are several options that provide more efficient encodings. Using the decimal rounding options for encoding and decoding provides lossless storage of common decimal representations like 7.99, in more efficient 32-bit format (rather than 64-bit). The `useFloat32` property has several possible options, available from the module as constants:
