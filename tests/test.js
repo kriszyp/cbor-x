@@ -158,6 +158,10 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized, data)
 	})
 
+	test('string overflow', function() {
+		assert.throws(() => CBOR.decode(Buffer.from('7a10000000', 'hex')));
+	})
+
 	test('encode/decode sample data', function(){
 		var data = sampleData
 		var serialized = CBOR.encode(data)
