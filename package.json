@@ -1,7 +1,7 @@
 {
   "name": "cbor-x",
   "author": "Kris Zyp",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Ultra-fast and conformant CBOR (RFC 8949) implementation with support for numerous tag extensions including records and structured cloning",
   "license": "MIT",
   "types": "./index.d.ts",
@@ -75,7 +75,7 @@
     "node:buffer": false
   },
   "optionalDependencies": {
-    "cbor-extract": "^2.2.1"
+    "cbor-extract": "^2.2.2"
   },
   "devDependencies": {
     "@rollup/plugin-json": "^5.0.1",

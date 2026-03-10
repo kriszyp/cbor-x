@@ -162,6 +162,12 @@ suite('CBOR basic tests', function(){
 		assert.throws(() => CBOR.decode(Buffer.from('7a10000000', 'hex')));
 	})
 
+	test('overlong encoding', function() {
+		const payload = Buffer.from([0x62, 0xc0, 0xaf])
+		const result = CBOR.decode(payload)
+		assert.notEqual(result, '/')
+	})
+
 	test('encode/decode sample data', function(){
 		var data = sampleData
 		var serialized = CBOR.encode(data)
