@@ -610,43 +610,49 @@ function readStringJS(length) {
 			units.push(byte1)
 		} else if ((byte1 & 0xe0) === 0xc0) {
 			// 2 bytes
-			const byte2 = src[position++] & 0x3f
-			const codePoint = ((byte1 & 0x1f) << 6) | byte2
-			// Reject overlong encoding: 2-byte sequences must encode values >= 0x80
-			if (codePoint < 0x80) {
-				units.push(0xFFFD) // replacement character
+			if (byte1 < 0xc2 || position >= end || (src[position] & 0xc0) !== 0x80) {
+				units.push(0xFFFD)
 			} else {
-				units.push(codePoint)
+				const byte2 = src[position++] & 0x3f
+				units.push(((byte1 & 0x1f) << 6) | byte2)
 			}
 		} else if ((byte1 & 0xf0) === 0xe0) {
 			// 3 bytes
-			const byte2 = src[position++] & 0x3f
-			const byte3 = src[position++] & 0x3f
-			const codePoint = ((byte1 & 0x1f) << 12) | (byte2 << 6) | byte3
-			// Reject overlong encoding: 3-byte sequences must encode values >= 0x800
-			// Also reject surrogates (0xD800-0xDFFF)
-			if (codePoint < 0x800 || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
-				units.push(0xFFFD) // replacement character
+			const byte2 = position < end ? src[position] : 0
+			if (position >= end || (byte2 & 0xc0) !== 0x80 ||
+				(byte1 === 0xe0 && byte2 < 0xa0) || (byte1 === 0xed && byte2 >= 0xa0)) {
+				units.push(0xFFFD)
 			} else {
-				units.push(codePoint)
+				position++
+				if (position >= end || (src[position] & 0xc0) !== 0x80) {
+					units.push(0xFFFD)
+				} else {
+					const byte3 = src[position++] & 0x3f
+					units.push(((byte1 & 0x1f) << 12) | ((byte2 & 0x3f) << 6) | byte3)
+				}
 			}
 		} else if ((byte1 & 0xf8) === 0xf0) {
 			// 4 bytes
-			const byte2 = src[position++] & 0x3f
-			const byte3 = src[position++] & 0x3f
-			const byte4 = src[position++] & 0x3f
-			let unit = ((byte1 & 0x07) << 0x12) | (byte2 << 0x0c) | (byte3 << 0x06) | byte4
-			// Reject overlong encoding: 4-byte sequences must encode values >= 0x10000
-			// Also reject values > 0x10FFFF (maximum valid Unicode)
-			if (unit < 0x10000 || unit > 0x10FFFF) {
-				units.push(0xFFFD) // replacement character
-			} else if (unit > 0xffff) {
-				unit -= 0x10000
-				units.push(((unit >>> 10) & 0x3ff) | 0xd800)
-				unit = 0xdc00 | (unit & 0x3ff)
-				units.push(unit)
+			const byte2 = position < end ? src[position] : 0
+			if (byte1 > 0xf4 || position >= end || (byte2 & 0xc0) !== 0x80 ||
+				(byte1 === 0xf0 && byte2 < 0x90) || (byte1 === 0xf4 && byte2 >= 0x90)) {
+				units.push(0xFFFD)
 			} else {
-				units.push(unit)
+				position++
+				if (position >= end || (src[position] & 0xc0) !== 0x80) {
+					units.push(0xFFFD)
+				} else {
+					const byte3 = src[position++] & 0x3f
+					if (position >= end || (src[position] & 0xc0) !== 0x80) {
+						units.push(0xFFFD)
+					} else {
+						const byte4 = src[position++] & 0x3f
+						let unit = ((byte1 & 0x07) << 0x12) | ((byte2 & 0x3f) << 0x0c) | (byte3 << 0x06) | byte4
+						unit -= 0x10000
+						units.push(((unit >>> 10) & 0x3ff) | 0xd800)
+						units.push(0xdc00 | (unit & 0x3ff))
+					}
+				}
 			}
 		} else {
 			units.push(0xFFFD) // replacement character for invalid lead byte
