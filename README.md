@@ -305,8 +305,8 @@ addExtension({
 	tag: 43311, // register our own extension code (a tag code)
 	encode(instance, encode) {
 		// define how your custom class should be encoded
-		encode(instance.myData); // return a buffer
-	}
+		return encode(instance.myData); // return a buffer
+	},
 	decode(data) {
 		// define how your custom class should be decoded
 		let instance = new MyCustomClass();
