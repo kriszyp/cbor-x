@@ -496,6 +496,20 @@ suite('CBOR basic tests', function(){
 		assert.deepEqual(deserialized, { foo: 'bar' });
 	})
 
+	test('own __proto__ key round-trips as an own property without polluting the prototype', function(){
+		// an own enumerable __proto__ key (as produced by JSON.parse / structuredClone)
+		const data = JSON.parse('{"__proto__": 1, "a": 2}')
+		const deserialized = decode(encode(data))
+		assert.deepEqual(Object.keys(deserialized), ['__proto__', 'a'])
+		assert.strictEqual(Object.getOwnPropertyDescriptor(deserialized, '__proto__').value, 1)
+		assert.strictEqual(deserialized.a, 2)
+		assert.strictEqual(Object.getPrototypeOf(deserialized), Object.prototype)
+		// a __proto__ key mapped to an object must not pollute Object.prototype
+		const attack = JSON.parse('{"__proto__": {"isAdmin": true}}')
+		decode(encode(attack))
+		assert.strictEqual({}.isAdmin, undefined)
+	})
+
 	test('big buffer', function() {
 		var size = 100000000
 		var data = new Uint8Array(size).fill(1)

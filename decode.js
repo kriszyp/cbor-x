@@ -102,7 +102,7 @@ export class Decoder {
 		}
 		let res = {}
 		//map.forEach((v,k) => res[Object.keys(this._keyMap)[Object.values(this._keyMap).indexOf(k)] || k] = v)
-		map.forEach((v,k) => res[safeKey(this._mapKey.has(k) ? this._mapKey.get(k) : k)] =  v)
+		map.forEach((v,k) => setKeyValue(res, safeKey(this._mapKey.has(k) ? this._mapKey.get(k) : k), v))
 		return res
 	}
 	
@@ -313,13 +313,13 @@ export function read() {
 							if (currentDecoder.keyMap) {
 								while((key = read()) != STOP_CODE) {
 									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
-									object[safeKey(currentDecoder.decodeKey(key))] = read()
+									setKeyValue(object, safeKey(currentDecoder.decodeKey(key)), read())
 								}
 							}
 							else {
 								while ((key = read()) != STOP_CODE) {
 									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
-									object[safeKey(key)] = read()
+									setKeyValue(object, safeKey(key), read())
 								}
 							}
 							return object
@@ -387,8 +387,8 @@ export function read() {
 			if (token >= maxMapSize) throw new Error(`Map size exceeds ${maxArraySize}`)
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
-				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
-				else for (let i = 0; i < token; i++) object[safeKey(read())] = read()
+				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) setKeyValue(object, safeKey(currentDecoder.decodeKey(read())), read())
+				else for (let i = 0; i < token; i++) setKeyValue(object, safeKey(read()), read())
 				return object
 			} else {
 				if (restoreMapsAsObject) {
@@ -418,11 +418,11 @@ export function read() {
 						let object = {}
 						if (currentDecoder.keyMap) for (let i = 2; i < length; i++) {
 							let key = currentDecoder.decodeKey(structure[i - 2])
-							object[safeKey(key)] = read()
+							setKeyValue(object, safeKey(key), read())
 						}
 						else for (let i = 2; i < length; i++) {
 							let key = structure[i - 2]
-							object[safeKey(key)] = read()
+							setKeyValue(object, safeKey(key), read())
 						}
 						return object
 					}
@@ -520,8 +520,8 @@ function createStructureReader(structure) {
 		if (this.slowReads++ >= inlineObjectReadThreshold) { // create a fast compiled reader
 			let array = this.length == length ? this : this.slice(0, length)
 			compiledReader = currentDecoder.keyMap 
-			? new Function('r', 'return {' + array.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) ? safeKey(k) + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
-			: new Function('r', 'return {' + array.map(key => validName.test(key) ? safeKey(key) + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
+			? new Function('r', 'return {' + array.map(k => currentDecoder.decodeKey(k)).map(k => validName.test(k) && k !== '__proto__' ? safeKey(k) + ':r()' : ('[' + JSON.stringify(k) + ']:r()')).join(',') + '}')
+			: new Function('r', 'return {' + array.map(key => validName.test(key) && key !== '__proto__' ? safeKey(key) + ':r()' : ('[' + JSON.stringify(key) + ']:r()')).join(',') + '}')
 			if (this.compiledReader)
 				compiledReader.next = this.compiledReader // if there is an existing one, we store multiple readers as a linked list because it is usually pretty rare to have multiple readers (of different length) for the same structure
 			compiledReader.propertyCount = length
@@ -529,9 +529,9 @@ function createStructureReader(structure) {
 			return compiledReader(read)
 		}
 		let object = {}
-		if (currentDecoder.keyMap) for (let i = 0; i < length; i++) object[safeKey(currentDecoder.decodeKey(this[i]))] = read()
+		if (currentDecoder.keyMap) for (let i = 0; i < length; i++) setKeyValue(object, safeKey(currentDecoder.decodeKey(this[i])), read())
 		else for (let i = 0; i < length; i++) {
-			object[safeKey(this[i])] = read();
+			setKeyValue(object, safeKey(this[i]), read());
 		}
 		return object
 	}
@@ -540,12 +540,21 @@ function createStructureReader(structure) {
 }
 
 function safeKey(key) {
-	// protect against prototype pollution
-	if (typeof key === 'string') return key === '__proto__' ? '__proto_' : key
+	// coerce the key to a valid property name (protect against expensive DoS string conversions)
+	if (typeof key === 'string') return key
 	if (typeof key === 'number' || typeof key === 'boolean' || typeof key === 'bigint') return key.toString();
 	if (key == null) return key + '';
-	// protect against expensive (DoS) string conversions
 	throw new Error('Invalid property name type ' + typeof key);
+}
+function setKeyValue(object, key, value) {
+	// assign a decoded property, defending against prototype pollution: a plain
+	// `object['__proto__'] = value` would invoke the prototype setter and lose the value,
+	// so an own `__proto__` key is materialized with defineProperty instead (matching
+	// JSON.parse/structuredClone semantics)
+	if (key === '__proto__')
+		Object.defineProperty(object, '__proto__', { value, configurable: true, enumerable: true, writable: true })
+	else
+		object[key] = value
 }
 
 let readFixedString = readStringJS
@@ -986,7 +995,7 @@ currentExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
 	let object = {}
 	for (let i = 2; i < length; i++) {
 		let key = structure[i - 2]
-		object[safeKey(key)] = data[i]
+		setKeyValue(object, safeKey(key), data[i])
 	}
 	return object
 }
@@ -1089,7 +1098,11 @@ currentExtensions[28] = (read) => {
 			referenceMap.set(id, { target })
 			targetProperties = read()
 		}
-		return Object.assign(target, targetProperties)
+		// copy properties onto the cycle placeholder; setKeyValue (rather than plain
+		// assignment/Object.assign) so an own `__proto__` key survives instead of hitting the setter
+		for (let key of Object.keys(targetProperties))
+			setKeyValue(target, key, targetProperties[key])
+		return target
 	}
 	refEntry.target = targetProperties // the placeholder wasn't used, replace with the deserialized one
 	return targetProperties // no cycle, can just use the returned read object
