@@ -243,13 +243,22 @@ export function checkedRead() {
 	}
 }
 
+function endOfCBORError() {
+	let error = new Error('Unexpected end of CBOR data')
+	error.incomplete = true
+	return error
+}
+
 export function read() {
+	// compared as < so that a NaN position (from a corrupt length) also throws instead of reading undefined
+	if (!(position < srcEnd)) throw endOfCBORError()
 	let token = src[position++]
 	let majorType = token >> 5
 	token = token & 0x1f
 	if (token > 0x17) {
 		switch (token) {
 			case 0x18:
+				if (position >= srcEnd) throw endOfCBORError()
 				token = src[position++]
 				break
 			case 0x19:
@@ -378,6 +387,9 @@ export function read() {
 			return readFixedString(token)
 		case 4: // array
 			if (token >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
+			// every element occupies at least one byte, so a length beyond what remains in the source can
+			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
+			if (token > srcEnd - position) throw endOfCBORError()
 			let array = new Array(token)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
@@ -385,6 +397,7 @@ export function read() {
 			return array
 		case 5: // map
 			if (token >= maxMapSize) throw new Error(`Map size exceeds ${maxArraySize}`)
+			if (token > (srcEnd - position) / 2) throw endOfCBORError() // each entry needs at least two bytes
 			if (currentDecoder.mapsAsObjects) {
 				let object = {}
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
@@ -476,11 +489,7 @@ export function read() {
 					throw new Error('Unknown token ' + token)
 			}
 		default: // negative int
-			if (isNaN(token)) {
-				let error = new Error('Unexpected end of CBOR data')
-				error.incomplete = true
-				throw error
-			}
+			if (isNaN(token)) throw endOfCBORError()
 			throw new Error('Unknown CBOR token ' + token)
 	}
 }
@@ -1220,10 +1229,12 @@ function readBundleExt() {
 }
 
 function readJustLength() {
+	if (!(position < srcEnd)) throw endOfCBORError()
 	let token = src[position++] & 0x1f
 	if (token > 0x17) {
 		switch (token) {
 			case 0x18:
+				if (position >= srcEnd) throw endOfCBORError()
 				token = src[position++]
 				break
 			case 0x19:

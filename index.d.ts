@@ -47,7 +47,7 @@ export class Decoder {
 	decode(messagePack: Buffer | Uint8Array): any
 	decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 }
-export function setMaxLimits(options: SizeLimitOptions): void
+export function setSizeLimits(options: Partial<SizeLimitOptions>): void
 export function decode(messagePack: Buffer | Uint8Array): any
 export function decodeMultiple(messagePack: Buffer | Uint8Array, forEach?: (value: any) => any): [] | void
 export function addExtension<T, R>(extension: Extension<T, R>): void
