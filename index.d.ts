@@ -11,6 +11,7 @@ export interface SizeLimitOptions {
 }
 export interface Options {
 	alwaysUseFloat?: boolean
+	int64AsNumber?: boolean
 	useFloat32?: FLOAT32_OPTIONS
 	useRecords?: boolean
 	structures?: {}[]
