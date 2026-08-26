@@ -390,7 +390,10 @@ export function read() {
 			// every element occupies at least one byte, so a length beyond what remains in the source can
 			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
 			if (token > srcEnd - position) throw endOfCBORError()
-			let array = new Array(token)
+			// a large declared length still passes the check above when nested arrays each claim the
+			// bytes a deeper one consumes, so preallocate only small lengths and grow the rest lazily,
+			// keeping cumulative allocation bounded to the elements actually decoded
+			let array = new Array(token < 0x100 ? token : 0)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
 			for (let i = 0; i < token; i++) array[i] = read()
