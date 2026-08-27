@@ -666,8 +666,22 @@ export class Encoder extends Decoder {
 					size++
 				}
 			}
-			target[objectOffset++ + start] = size >> 8
-			target[objectOffset + start] = size & 0xff
+			if (size < 0x10000) {
+				// fits in a map-16 (uint16) count: back-patch the reserved 2 bytes
+				target[objectOffset++ + start] = size >> 8
+				target[objectOffset + start] = size & 0xff
+			} else {
+				// too many entries for a map-16 count: widen the already-written header
+				// to map-32, mirroring writeArrayHeader's 0x9a/setUint32 path. Shift the
+				// encoded entries 2 bytes forward to make room for the wider (uint32) count.
+				if (position + 2 > safeEnd)
+					makeRoom(position + 2)
+				let headerPosition = objectOffset + start
+				target.copyWithin(headerPosition + 4, headerPosition + 2, position)
+				position += 2
+				target[headerPosition - 1] = 0xba // map 32
+				targetView.setUint32(headerPosition, size)
+			}
 		} :
 		(object, skipValues) => {
 			let nextTransition, transition = structures.transitions || (structures.transitions = Object.create(null))
