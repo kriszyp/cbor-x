@@ -3,7 +3,6 @@ let textEncoder
 try {
 	textEncoder = new TextEncoder()
 } catch (error) {}
-let extensions, extensionClasses
 const Buffer = typeof globalThis === 'object' && globalThis.Buffer;
 const hasNodeBuffer = typeof Buffer !== 'undefined'
 const ByteArrayAllocate = hasNodeBuffer ? Buffer.allocUnsafeSlow : Uint8Array
@@ -64,6 +63,8 @@ export class Encoder extends Decoder {
 		let recordIdsToRemove = []
 		let transitionsCount = 0
 		let serializationsSinceTransitionRebuild = 0
+		const extensions = this.extensions = defaultExtensions.slice();
+		const extensionClasses = this.extensionClasses = defaultExtensionClasses.slice();
 		
 		this.mapEncode = function(value, encodeOptions) {
 			// Experimental support for premapping keys using _keyMap instad of keyMap - not optiimised yet)
@@ -945,6 +946,14 @@ export class Encoder extends Decoder {
 		// saveShared may fail to write and reload, or may have reloaded to check compatibility and overwrite saved data, either way load the correct shared data
 		return saveResults
 	}
+	addExtension(extension) {
+		if (extension.Class) {
+			if (!extension.encode)
+				throw new Error('Extension has no encode function')
+				this.extensionClasses.unshift(extension.Class)
+				this.extensions.unshift(extension)
+		}
+	}
 }
 function writeEntityLength(length, majorValue) {
 	if (length < 0x18)
@@ -1045,14 +1054,14 @@ function findRepetitiveStrings(value, packedValues) {
 	}
 }
 const isLittleEndianMachine = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1
-extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer,
+const defaultExtensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
 	Float32Array, Float64Array, SharedData ]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
-extensions = [{ // Date
+const defaultExtensions = [{ // Date
 	tag: 1,
 	encode(date, encode) {
 		let seconds = date.getTime() / 1000
@@ -1216,19 +1225,16 @@ function writeBundles(start, encode) {
 	encode(writeStrings[1])
 }
 
+let defaultEncoder = new Encoder({ useRecords: false })
 export function addExtension(extension) {
 	if (extension.Class) {
-		if (!extension.encode)
-			throw new Error('Extension has no encode function')
-		extensionClasses.unshift(extension.Class)
-		extensions.unshift(extension)
+		defaultEncoder.addExtension(extension);
 	}
 	decodeAddExtension(extension)
 }
-let defaultEncoder = new Encoder({ useRecords: false })
-export const encode = defaultEncoder.encode
-export const encodeAsIterable = defaultEncoder.encodeAsIterable
-export const encodeAsAsyncIterable = defaultEncoder.encodeAsAsyncIterable
+export const encode = defaultEncoder.encode.bind(defaultEncoder)
+export const encodeAsIterable = defaultEncoder.encodeAsIterable.bind(defaultEncoder)
+export const encodeAsAsyncIterable = defaultEncoder.encodeAsAsyncIterable.bind(defaultEncoder)
 export { FLOAT32_OPTIONS } from './decode.js'
 import { FLOAT32_OPTIONS } from './decode.js'
 export const { NEVER, ALWAYS, DECIMAL_ROUND, DECIMAL_FIT } = FLOAT32_OPTIONS
