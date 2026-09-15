@@ -636,6 +636,14 @@ suite('CBOR basic tests', function(){
 		var deserialized = encoder.decode(serialized)
 		assert.equal(deserialized, data)
 	})
+	test('negative int64 as number', function() {
+		let encoded = Buffer.from('3b0000000e96848f5f', 'hex')
+		assert.equal(new CBOR.Decoder().decode(encoded), -62654812000n)
+
+		let decoder = new CBOR.Decoder({ int64AsNumber: true })
+		assert.equal(decoder.decode(encoded), -62654812000)
+		assert.equal(decoder.decode(Buffer.from('3b001ffffffffffffe', 'hex')), Number.MIN_SAFE_INTEGER)
+	})
 	test('bigint to float', function() {
 		var data = {
 			a: 325283295382932843n
