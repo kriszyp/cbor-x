@@ -636,6 +636,12 @@ suite('CBOR basic tests', function(){
 		var deserialized = encoder.decode(serialized)
 		assert.equal(deserialized, data)
 	})
+	test('negative int64AsNumber does not truncate', function() {
+		let encoder = new Encoder({ int64AsNumber: true })
+		let encoded = encoder.encode(-62654812000)
+		assert.equal(encoder.decode(encoded), -62654812000)
+	})
+
 	test('bigint to float', function() {
 		var data = {
 			a: 325283295382932843n

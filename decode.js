@@ -297,6 +297,7 @@ export function read() {
 				} else if (currentDecoder.int64AsNumber) {
 					token = dataView.getUint32(position) * 0x100000000
 					token += dataView.getUint32(position + 4)
+					if (majorType == 1) return -1 - token
 				} else token = dataView.getBigUint64(position)
 				position += 8
 				break
