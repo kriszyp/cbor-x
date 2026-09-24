@@ -81,6 +81,21 @@ suite('decode malformed containers', function () {
     assert.isBelow((process.memoryUsage().heapUsed - before) / 1048576, 50, 'heap growth in MB')
   })
 
+  test('nested arrays each claiming the remaining bytes do not allocate', () => {
+    // every header declares exactly the bytes left after it, so each container passes the
+    // "length within remaining source" check, yet a preallocated slot per element would let a
+    // few kilobytes of headers retain gigabytes across the nesting chain
+    const size = 40000
+    const payload = Buffer.alloc(size)
+    for (let p = 0; p + 5 <= size; p += 5) {
+      payload[p] = 0x9a
+      payload.writeUInt32BE(size - (p + 5), p + 1)
+    }
+    let before = process.memoryUsage().heapUsed
+    assert.throws(() => decode(payload))
+    assert.isBelow((process.memoryUsage().heapUsed - before) / 1048576, 50, 'heap growth in MB')
+  })
+
   test('truncated data reports an incomplete error', () => {
     for (const bytes of [[0x9a, 0x01, 0x31, 0x2d, 0x00], [0x9f], [0xbf], [0x98, 0x18]]) {
       try {
