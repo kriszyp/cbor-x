@@ -162,6 +162,18 @@ suite('CBOR basic tests', function(){
 		assert.throws(() => CBOR.decode(Buffer.from('7a10000000', 'hex')));
 	})
 
+	test('break stop code outside indefinite-length item', function() {
+		// a lone break (0xff) is not well-formed CBOR outside an indefinite-length
+		// item (RFC 8949 3.2.1); it must be rejected, not decoded to a value
+		assert.throws(() => CBOR.decode(Buffer.from('ff', 'hex')))       // top level
+		assert.throws(() => CBOR.decode(Buffer.from('81ff', 'hex')))     // array element
+		assert.throws(() => CBOR.decode(Buffer.from('a16161ff', 'hex'))) // map value
+		assert.throws(() => CBOR.decode(Buffer.from('c0ff', 'hex')))     // tag content
+		// valid indefinite-length items still decode
+		assert.deepEqual(CBOR.decode(Buffer.from('9f01ff', 'hex')), [1])
+		assert.deepEqual(CBOR.decode(Buffer.from('bf616101ff', 'hex')), { a: 1 })
+	})
+
 	test('overlong encoding', function() {
 		const payload = Buffer.from([0x62, 0xc0, 0xaf])
 		const result = CBOR.decode(payload)
