@@ -181,7 +181,7 @@ export class Encoder extends Decoder {
 				if (throwOnIterable)
 					return;
 				encode(value)
-				if (bundledStrings) {
+				if (bundledStrings && bundledStrings.position) { // position is only set once a bundle has been started
 					writeBundles(start, encode)
 				}
 				encoder.offset = position // update the offset so next serialization doesn't write over our buffer, but can continue writing to same buffer sequentially
