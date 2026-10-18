@@ -19,8 +19,9 @@ let maxArraySize = 112810000 // This is the maximum array size in V8. We would p
 let maxMapSize = 16810000 // JavaScript has a fixed maximum map size of about 16710000, but JS itself enforces this,
 // so we don't need to
 
-let maxObjectSize = 16710000; // This is the maximum number of keys in a Map. It takes over a minute to create this
-// many keys in an object, so also probably a reasonable choice there.
+let maxObjectSize = 16710000; // It takes over a minute to create this many keys in an object, so this is probably a
+// reasonable choice.
+let objectSizeLimit = maxObjectSize // objects are limited by both maxObjectSize and maxMapSize
 let strings = EMPTY_ARRAY
 let stringPosition = 0
 let currentDecoder = {}
@@ -124,7 +125,13 @@ export class Decoder {
 			// re-entrant execution, save the state and restore it after we do this decode
 			return saveState(() => {
 				clearSource()
-				return this ? this.decode(source, end) : Decoder.prototype.decode.call(defaultOptions, source, end)
+				try {
+					return this ? this.decode(source, end) : Decoder.prototype.decode.call(defaultOptions, source, end)
+				} catch (error) {
+					if (error && typeof error == 'object')
+						nestedDecodeErrors.add(error)
+					throw error
+				}
 			})
 		}
 		srcEnd = end > -1 ? end : source.length
@@ -204,15 +211,13 @@ export class Decoder {
 export function getPosition() {
 	return position
 }
+const nestedDecodeErrors = new WeakSet()
 export function checkedRead() {
 	try {
 		let result = read()
 		if (bundledStrings) {
-			if (position >= bundledStrings.postBundlePosition) {
-				let error = new Error('Unexpected bundle position');
-				error.incomplete = true;
-				throw error
-			}
+			if (position >= bundledStrings.postBundlePosition)
+				throw new Error('Unexpected bundle position')
 			// bundled strings to skip past
 			position = bundledStrings.postBundlePosition;
 			bundledStrings = null;
@@ -236,7 +241,14 @@ export function checkedRead() {
 		return result
 	} catch(error) {
 		clearSource()
-		if (error instanceof RangeError || error.message.startsWith('Unexpected end of buffer')) {
+		if (nestedDecodeErrors.has(error)) {
+			// from a nested decode of embedded data (by an extension), which was complete in this source
+			if (error.incomplete)
+				error.incomplete = false
+		} else if (error instanceof RangeError && position + 8 > srcEnd ||
+				error && typeof error.message == 'string' && error.message.startsWith('Unexpected end of buffer')) {
+			// a DataView read past the end of the source; these read at most 8 bytes and precede advancing position.
+			// Any other RangeError (such as a stack overflow from deeply nested input) is fatal.
 			error.incomplete = true
 		}
 		throw error
@@ -321,13 +333,13 @@ export function read() {
 							let i = 0;
 							if (currentDecoder.keyMap) {
 								while((key = read()) != STOP_CODE) {
-									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
+									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(currentDecoder.decodeKey(key))] = read()
 								}
 							}
 							else {
 								while ((key = read()) != STOP_CODE) {
-									if (i++ >= maxMapSize) throw new Error(`Property count exceeds ${maxMapSize}`)
+									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(key)] = read()
 								}
 							}
@@ -373,11 +385,13 @@ export function read() {
 		case 1: // negative int
 			return ~token
 		case 2: // buffer
+			if (token > srcEnd - position) throw endOfCBORError()
 			return readBin(token)
 		case 3: // string
-			if (srcStringEnd >= position) {
+			if (srcStringEnd >= position) { // already extracted, which only covers complete strings
 				return srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
 			}
+			if (token > srcEnd - position) throw endOfCBORError()
 			if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
 				// for small blocks, avoiding the overhead of the extract call is helpful
 				let string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
@@ -386,7 +400,7 @@ export function read() {
 			}
 			return readFixedString(token)
 		case 4: // array
-			if (token >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
+			if (token > maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 			// every element occupies at least one byte, so a length beyond what remains in the source can
 			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
 			if (token > srcEnd - position) throw endOfCBORError()
@@ -396,9 +410,9 @@ export function read() {
 			for (let i = 0; i < token; i++) array[i] = read()
 			return array
 		case 5: // map
-			if (token >= maxMapSize) throw new Error(`Map size exceeds ${maxArraySize}`)
-			if (token > (srcEnd - position) / 2) throw endOfCBORError() // each entry needs at least two bytes
 			if (currentDecoder.mapsAsObjects) {
+				if (token > objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
+				if (token > (srcEnd - position) / 2) throw endOfCBORError() // each entry needs at least two bytes
 				let object = {}
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
 				else for (let i = 0; i < token; i++) object[safeKey(read())] = read()
@@ -408,6 +422,8 @@ export function read() {
 					currentDecoder.mapsAsObjects = true
 					restoreMapsAsObject = false
 				}
+				if (token > maxMapSize) throw new Error(`Map size exceeds ${maxMapSize}`)
+				if (token > (srcEnd - position) / 2) throw endOfCBORError()
 				let map = new Map()
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) map.set(currentDecoder.decodeKey(read()),read())
 				else for (let i = 0; i < token; i++) map.set(read(), read())
@@ -879,6 +895,7 @@ function readKey() {
 	if (length >= 0x60 && length < 0x78) {
 		// fixstr, potentially use key cache
 		length = length - 0x60
+		if (length > srcEnd - position) throw endOfCBORError()
 		if (srcStringEnd >= position) // if it has been extracted, must use it (and faster anyway)
 			return srcString.slice(position - srcStringStart, (position += length) - srcStringStart)
 		else if (!(srcStringEnd == 0 && srcEnd < 180))
@@ -1014,18 +1031,12 @@ currentExtensions[27] = (data) => { // http://cbor.schmorp.de/generic-object
 	return (glbl[data[0]] || Error)(data[1], data[2])
 }
 const packedTable = (read) => {
-	if (src[position++] != 0x84) {
-		let error = new Error('Packed values structure must be followed by a 4 element array')
-		if (src.length < position)
-			error.incomplete = true
-		throw error
-	}
+	if (!(position < srcEnd)) throw endOfCBORError()
+	if (src[position++] != 0x84)
+		throw new Error('Packed values structure must be followed by a 4 element array')
 	let newPackedValues = read() // packed values
-	if (!newPackedValues || !newPackedValues.length) {
-		let error = new Error('Packed values structure must be followed by a 4 element array')
-		error.incomplete = true
-		throw error
-	}
+	if (!Array.isArray(newPackedValues) || !newPackedValues.length)
+		throw new Error('Packed values structure must be followed by a 4 element array')
 	packedValues = packedValues ? newPackedValues.concat(packedValues.slice(newPackedValues.length)) : newPackedValues
 	packedValues.prefixes = read()
 	packedValues.suffixes = read()
@@ -1043,10 +1054,7 @@ currentExtensions[PACKED_REFERENCE_TAG_ID] = (data) => { // packed reference
 	}
 	if (typeof data == 'number')
 		return packedValues[16 + (data >= 0 ? 2 * data : (-2 * data - 1))]
-	let error = new Error('No support for non-integer packed references yet')
-	if (data === undefined)
-		error.incomplete = true
-	throw error
+	throw new Error('No support for non-integer packed references yet')
 }
 
 // The following code is an incomplete implementation of http://cbor.schmorp.de/stringref
@@ -1116,9 +1124,19 @@ currentExtensions[258] = (array) => new Set(array); // https://github.com/input-
 (currentExtensions[259] = (read) => {
 	// https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec
 	// for decoding as a standard Map
-	if (currentDecoder.mapsAsObjects) {
-		currentDecoder.mapsAsObjects = false
+	let decoder = currentDecoder
+	if (decoder.mapsAsObjects) {
+		decoder.mapsAsObjects = false
 		restoreMapsAsObject = true
+		try {
+			return read()
+		} finally {
+			// normally restored by the map header, but not if the tagged value is not a map or the read fails
+			if (restoreMapsAsObject) {
+				decoder.mapsAsObjects = true
+				restoreMapsAsObject = false
+			}
+		}
 	}
 	return read()
 }).handlesRead = true
@@ -1238,10 +1256,12 @@ function readJustLength() {
 				token = src[position++]
 				break
 			case 0x19:
+				if (position + 2 > srcEnd) throw endOfCBORError()
 				token = dataView.getUint16(position)
 				position += 2
 				break
 			case 0x1a:
+				if (position + 4 > srcEnd) throw endOfCBORError()
 				token = dataView.getUint32(position)
 				position += 4
 				break
@@ -1283,22 +1303,27 @@ function saveState(callback) {
 	let savedStructures = currentStructures
 	let savedDecoder = currentDecoder
 	let savedSequentialMode = sequentialMode
-	let value = callback()
-	srcEnd = savedSrcEnd
-	position = savedPosition
-	stringPosition = savedStringPosition
-	srcStringStart = savedSrcStringStart
-	srcStringEnd = savedSrcStringEnd
-	srcString = savedSrcString
-	strings = savedStrings
-	referenceMap = savedReferenceMap
-	bundledStrings = savedBundledStrings
-	src = savedSrc
-	sequentialMode = savedSequentialMode
-	currentStructures = savedStructures
-	currentDecoder = savedDecoder
-	dataView = new DataView(src.buffer, src.byteOffset, src.byteLength)
-	return value
+	let savedRestoreMapsAsObject = restoreMapsAsObject
+	restoreMapsAsObject = false
+	try {
+		return callback()
+	} finally {
+		srcEnd = savedSrcEnd
+		position = savedPosition
+		stringPosition = savedStringPosition
+		srcStringStart = savedSrcStringStart
+		srcStringEnd = savedSrcStringEnd
+		srcString = savedSrcString
+		strings = savedStrings
+		referenceMap = savedReferenceMap
+		bundledStrings = savedBundledStrings
+		src = savedSrc
+		sequentialMode = savedSequentialMode
+		currentStructures = savedStructures
+		currentDecoder = savedDecoder
+		restoreMapsAsObject = savedRestoreMapsAsObject
+		dataView = new DataView(src.buffer, src.byteOffset, src.byteLength)
+	}
 }
 export function clearSource() {
 	src = null
@@ -1314,6 +1339,7 @@ export function setSizeLimits(limits) {
 	if (limits.maxMapSize) maxMapSize = limits.maxMapSize;
 	if (limits.maxArraySize) maxArraySize = limits.maxArraySize;
 	if (limits.maxObjectSize) maxObjectSize = limits.maxObjectSize;
+	objectSizeLimit = Math.min(maxObjectSize, maxMapSize)
 }
 
 export const mult10 = new Array(147) // this is a table matching binary exponents to the multiplier to determine significant digit rounding

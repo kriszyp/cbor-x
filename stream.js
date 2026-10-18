@@ -36,24 +36,22 @@ export class DecoderStream extends Transform {
 			chunk = Buffer.concat([this.incompleteBuffer, chunk])
 			this.incompleteBuffer = null
 		}
-		let values
+		let values, fatalError
 		try {
 			values = this.decoder.decodeMultiple(chunk)
 		} catch(error) {
-			if (error.incomplete) {
+			values = error.values
+			if (error.incomplete)
 				this.incompleteBuffer = chunk.slice(error.lastPosition)
-				values = error.values
-			} else {
-				return callback(error)
-			}
-		} finally {
-			for (let value of values || []) {
-				if (value === null)
-					value = this.getNullValue()
-				this.push(value)
-			}
+			else
+				fatalError = error
 		}
-		callback()
+		for (let value of values || []) {
+			if (value === null)
+				value = this.getNullValue()
+			this.push(value)
+		}
+		callback(fatalError)
 	}
 	getNullValue() {
 		return Symbol.for(null)
