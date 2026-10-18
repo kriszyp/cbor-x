@@ -1,6 +1,7 @@
 import { Transform } from 'stream'
 import { Encoder } from './encode.js'
 import { checkedRead, getPosition, Decoder, clearSource } from './decode.js'
+import { ChunkDecoder } from './iterators.js'
 var DEFAULT_OPTIONS = {objectMode: true}
 
 export class EncoderStream extends Transform {
@@ -30,21 +31,16 @@ export class DecoderStream extends Transform {
 		super(options)
 		options.structures = []
 		this.decoder = options.decoder || new Decoder(options)
+		this.chunkDecoder = new ChunkDecoder(this.decoder, options.maxIncompleteBufferSize)
 	}
 	_transform(chunk, encoding, callback) {
-		if (this.incompleteBuffer) {
-			chunk = Buffer.concat([this.incompleteBuffer, chunk])
-			this.incompleteBuffer = null
-		}
 		let values, fatalError
 		try {
-			values = this.decoder.decodeMultiple(chunk)
+			// decodeMultiple is called here, not through chunkDecoder, because the extra call slowed small writes by 4%
+			values = this.chunkDecoder.buffer ? this.chunkDecoder.decodeAfterIncomplete(chunk) : this.decoder.decodeMultiple(chunk)
 		} catch(error) {
 			values = error.values
-			if (error.incomplete)
-				this.incompleteBuffer = chunk.slice(error.lastPosition)
-			else
-				fatalError = error
+			fatalError = this.chunkDecoder.keepIncomplete(error, chunk)
 		}
 		for (let value of values || []) {
 			if (value === null)
@@ -52,6 +48,9 @@ export class DecoderStream extends Transform {
 			this.push(value)
 		}
 		callback(fatalError)
+	}
+	_flush(callback) {
+		callback(this.chunkDecoder.end())
 	}
 	getNullValue() {
 		return Symbol.for(null)

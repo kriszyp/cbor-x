@@ -1,6 +1,8 @@
 import { Decoder, decode, decodeMultiple, setSizeLimits, addExtension } from '../decode.js'
 import { Encoder } from '../encode.js'
 import { DecoderStream, decodeIter } from '../node-index.js'
+import { Readable, Writable } from 'stream'
+import { pipeline } from 'stream/promises'
 import { assert } from 'chai'
 
 // A prefix of a valid encoding can only fail because bytes are missing, so it must always be reported as
@@ -110,6 +112,220 @@ suite('truncated encodings', function () {
 	})
 })
 
+function countDecodeMultiple(decoder) {
+	const counter = { calls: 0 }
+	const decodeMultiple = decoder.decodeMultiple
+	decoder.decodeMultiple = function (...args) {
+		counter.calls++
+		return decodeMultiple.apply(this, args)
+	}
+	return counter
+}
+
+// Writes the chunks to a DecoderStream, then ends it if end is true; resolves once it finishes or fails
+async function streamChunks(chunks, { end = true, ...options } = {}) {
+	const stream = new DecoderStream(options)
+	const counter = countDecodeMultiple(stream.decoder)
+	const received = []
+	let error, written = 0
+	stream.on('data', value => received.push(value))
+	const done = new Promise(resolve => {
+		stream.on('error', failure => resolve(error = failure))
+		stream.on('finish', resolve)
+	})
+	for (const chunk of chunks) {
+		if (stream.errored) break
+		stream.write(chunk)
+		written++
+	}
+	if (end && !stream.errored) stream.end()
+	await (end ? done : new Promise(resolve => setImmediate(resolve)))
+	return { received, error, calls: counter.calls, written, stream }
+}
+
+function split(bytes, size) {
+	const chunks = []
+	for (let start = 0; start < bytes.length; start += size) chunks.push(bytes.subarray(start, start + size))
+	return chunks
+}
+
+suite('incomplete input in streams', function () {
+	this.timeout(60000)
+
+	// A lower bound on an incomplete value's size that was too high would hold back a value whose bytes have all
+	// arrived, so check that each value is emitted on the chunk with its last byte.
+	for (const [configLabel, options] of Object.entries(configs)) {
+		test(`decodeIter emits each value on the chunk that completes it, with one-byte chunks: ${configLabel}`, () => {
+			const encoder = new Encoder({ ...options })
+			const encodings = Object.values(values).map(value => encoder.encode(value))
+			const encoded = Buffer.concat(encodings)
+			const decoder = new Decoder({ ...options })
+			const expected = encodings.map(encoding => decoder.decode(encoding))
+			let fed = 0
+			const ends = []
+			const received = []
+			for (const value of decodeIter((function * () {
+				for (; fed < encoded.length; fed++) yield encoded.subarray(fed, fed + 1)
+			})(), { ...options })) {
+				received.push(value)
+				ends.push(fed + 1)
+			}
+			let end = 0
+			assert.deepStrictEqual(ends, encodings.map(encoding => end += encoding.length))
+			assert.deepStrictEqual(received, expected)
+		})
+	}
+
+	test('#153: a 4 GiB byte string header and a trickle of data fails at maxIncompleteBufferSize', async () => {
+		const chunks = [Buffer.from([0x5a, 0xff, 0xff, 0xff, 0xff]), ...new Array(4100).fill(Buffer.alloc(16384))]
+		const { error, calls, written, stream } = await streamChunks(chunks)
+		assert.strictEqual(error?.message, 'Maximum incomplete buffer size exceeded')
+		assert.strictEqual(written, 1 + 4096, 'fails on the chunk that passes 64 MB')
+		assert.strictEqual(calls, 1, 'decoded only when the header arrived')
+		assert.isNull(stream.chunkDecoder.buffer)
+	})
+
+	test('maxIncompleteBufferSize allows exactly that many incomplete bytes', async () => {
+		const header = Buffer.from([0x5a, 0xff, 0xff, 0xff, 0xff])
+		const chunks = [header, ...new Array(20).fill(Buffer.alloc(100))]
+		const atLimit = await streamChunks(chunks.slice(0, 11), { maxIncompleteBufferSize: 1005, end: false })
+		assert.isUndefined(atLimit.error)
+		const overLimit = await streamChunks(chunks.slice(0, 11), { maxIncompleteBufferSize: 1004 })
+		assert.strictEqual(overLimit.error?.message, 'Maximum incomplete buffer size exceeded')
+		assert.strictEqual((await streamChunks([Buffer.concat(chunks)], { maxIncompleteBufferSize: 0 })).error?.message,
+			'Maximum incomplete buffer size exceeded')
+	})
+
+	test('maxIncompleteBufferSize limits only the bytes of the incomplete value', async () => {
+		const value = Buffer.alloc(1000, 7)
+		const encoded = new Encoder().encode(value)
+		// a complete value larger than the limit, and a chunk that completes a value and carries many more
+		const { received, error } = await streamChunks([encoded, encoded.subarray(0, 600),
+			Buffer.concat([encoded.subarray(600), Buffer.alloc(5000, 1)])], { maxIncompleteBufferSize: 700 })
+		assert.isUndefined(error)
+		assert.deepStrictEqual(received, [value, value, ...new Array(5000).fill(1)])
+	})
+
+	test('values before an incomplete value that exceeds maxIncompleteBufferSize are emitted', async () => {
+		const { received, error } = await streamChunks([Buffer.concat([Buffer.from([0x01, 0x61, 0x61]),
+			Buffer.from([0x5a, 0xff, 0xff, 0xff, 0xff]), Buffer.alloc(200)])], { maxIncompleteBufferSize: 100 })
+		assert.strictEqual(error?.message, 'Maximum incomplete buffer size exceeded')
+		assert.deepStrictEqual(received, [1, 'a'])
+	})
+
+	test('a value split into many chunks is decoded again only when its declared lengths could be met', async () => {
+		// decoded once for each declared length that the buffered bytes could not meet, and once to complete it
+		for (const [value, expectedCalls] of [[[1, 'two', Buffer.alloc(300000, 3), Buffer.alloc(100000, 4)], 3],
+				['y'.repeat(300000), 2], [[new Array(30000).fill(7)], 2]]) {
+			const { received, calls } = await streamChunks(split(new Encoder().encode(value), 16384), { end: false })
+			assert.deepStrictEqual(received, [value], 'emitted before the stream ends')
+			assert.strictEqual(calls, expectedCalls)
+		}
+	})
+
+	test('values already emitted are not overwritten by later chunks', async () => {
+		const first = Buffer.alloc(30000, 1)
+		const second = Buffer.alloc(30000, 2)
+		const encoded = Buffer.concat([first, second].map(value => new Encoder().encode(value)))
+		const ends = [100, 20010, 35010, 36010, encoded.length]
+		const chunks = ends.map((end, i) => encoded.subarray(ends[i - 1] || 0, end))
+		const stream = new DecoderStream()
+		const received = []
+		stream.on('data', value => received.push(value))
+		for (const chunk of chunks.slice(0, 4)) stream.write(chunk)
+		await new Promise(resolve => setImmediate(resolve))
+		// the third chunk completed the first value in the buffer's free space and ended inside the second, which the
+		// fourth chunk extended in that same buffer
+		assert.strictEqual(stream.chunkDecoder.buffer.buffer, received[0].buffer)
+		stream.end(chunks[4])
+		await new Promise(resolve => stream.on('finish', resolve))
+		assert.deepStrictEqual(received, [first, second])
+	})
+
+	test('empty chunks', async () => {
+		let { received, error, calls } = await streamChunks([Buffer.from([0x01]), Buffer.alloc(0)])
+		assert.isUndefined(error, 'an empty final chunk is not an incomplete value')
+		assert.deepStrictEqual(received, [1])
+		;({ received, error, calls } = await streamChunks([Buffer.alloc(0)]))
+		assert.isUndefined(error)
+		// a truncated uint16 has no declared length to wait for, but an empty chunk can not complete it
+		;({ received, error, calls } = await streamChunks([Buffer.from([0x19, 0x01]), ...new Array(1000).fill(Buffer.alloc(0)),
+			Buffer.from([0x02])]))
+		assert.isUndefined(error)
+		assert.deepStrictEqual(received, [0x102])
+		assert.strictEqual(calls, 2)
+	})
+
+	test('#155: a stream that ends inside a value errors', async () => {
+		const { received, error } = await streamChunks([Buffer.from([0x01, 0x82, 0x01])])
+		assert.deepStrictEqual(received, [1])
+		assert.strictEqual(error?.message, 'Unexpected end of CBOR data')
+		assert.isTrue(error.incomplete)
+	})
+
+	test('a chunk that is not a buffer after incomplete input errors through the stream', async () => {
+		const { received, error } = await streamChunks([Buffer.from([0x01, 0x82, 0x01]), 'x'])
+		assert.deepStrictEqual(received, [1])
+		assert.instanceOf(error, TypeError)
+	})
+
+	test('DecoderStream in a pipeline', async () => {
+		const encoded = Buffer.concat([1, 'two', Buffer.alloc(40000, 3), { four: [4] }].map(value => new Encoder().encode(value)))
+		const run = async (chunks, options) => {
+			const received = []
+			let error
+			try {
+				await pipeline(Readable.from(chunks), new DecoderStream(options),
+					new Writable({ objectMode: true, write(value, encoding, callback) { received.push(value); callback() } }))
+			} catch (failure) {
+				error = failure
+			}
+			return { received, error }
+		}
+		let { received, error } = await run(split(encoded, 1000))
+		assert.isUndefined(error)
+		assert.deepStrictEqual(received, [1, 'two', Buffer.alloc(40000, 3), { four: [4] }])
+		;({ received, error } = await run(split(encoded.subarray(0, -1), 1000)))
+		assert.isTrue(error?.incomplete)
+		assert.deepStrictEqual(received, [1, 'two', Buffer.alloc(40000, 3)])
+		;({ received, error } = await run(split(encoded, 1000), { maxIncompleteBufferSize: 20000 }))
+		assert.strictEqual(error?.message, 'Maximum incomplete buffer size exceeded')
+		assert.deepStrictEqual(received, [1, 'two'])
+	})
+
+	test('decodeIter reports input that ends inside a value', async () => {
+		const chunks = [Buffer.from([0x01, 0x82]), Buffer.from([0x01])]
+		const received = []
+		assert.throws(() => { for (const value of decodeIter(chunks)) received.push(value) }, 'Unexpected end of CBOR data')
+		assert.deepStrictEqual(received, [1])
+		const receivedAsync = []
+		try {
+			for await (const value of decodeIter((async function * () { yield * chunks })())) receivedAsync.push(value)
+			assert.fail('should throw')
+		} catch (error) {
+			assert.isTrue(error.incomplete)
+		}
+		assert.deepStrictEqual(receivedAsync, [1])
+		assert.deepStrictEqual([...decodeIter([Buffer.from([0x01]), Buffer.alloc(0)])], [1])
+		assert.deepStrictEqual([...decodeIter([])], [])
+	})
+
+	test('decodeIter honors maxIncompleteBufferSize', async () => {
+		const chunks = [Buffer.from([0x01, 0x5a, 0xff, 0xff, 0xff, 0xff]), Buffer.alloc(100), Buffer.alloc(100)]
+		const received = []
+		assert.throws(() => {
+			for (const value of decodeIter(chunks, { maxIncompleteBufferSize: 150 })) received.push(value)
+		}, 'Maximum incomplete buffer size exceeded')
+		assert.deepStrictEqual(received, [1])
+		try {
+			for await (const value of decodeIter((async function * () { yield * chunks })(), { maxIncompleteBufferSize: 150 })) {}
+			assert.fail('should throw')
+		} catch (error) {
+			assert.strictEqual(error.message, 'Maximum incomplete buffer size exceeded')
+		}
+	})
+})
+
 // The decoder recurses once per level of nesting; input nested deeper than the call stack allows must fail
 // as a normal (fatal) error, not be mistaken for truncated input that more bytes could complete.
 const deeplyNested = {
@@ -145,7 +361,7 @@ suite('deeply nested input', function () {
 			stream.write(deeplyNested.arrays)
 		})
 		assert.instanceOf(error, RangeError)
-		assert.isUndefined(stream.incompleteBuffer)
+		assert.isNull(stream.chunkDecoder.buffer)
 	})
 
 	test('decodeIter yields the values that precede a fatal error', async () => {
@@ -250,7 +466,7 @@ suite('complete but invalid input is not incomplete', function () {
 				stream.write(Buffer.from(bytes))
 			})
 			assert.isNotOk(error.incomplete)
-			assert.isUndefined(stream.incompleteBuffer)
+			assert.isNull(stream.chunkDecoder.buffer)
 		})
 	}
 	test('an extension sees whether its own nested decode was incomplete', () => {
