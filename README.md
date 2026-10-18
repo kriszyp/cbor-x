@@ -241,7 +241,11 @@ setSizeLimits({
 });
 ```
 
+`maxMapSize` limits the entries of a decoded `Map`. A map decoded as an object (with `mapsAsObjects`) is limited to the smaller of `maxObjectSize` and `maxMapSize`.
+
 Declared array and map lengths are also always validated against the number of bytes remaining in the source, so truncated or malformed input is rejected immediately instead of allocating for the length it claims. These limits are for bounding legitimately encoded (but unwanted) large data.
+
+Nesting depth is bounded by the JavaScript call stack: input nested deeper than the stack allows (typically several thousand levels) throws the engine's stack overflow error (a `RangeError` in V8 and JavaScriptCore). Like other malformed input, this is not marked as `incomplete`, so a `DecoderStream` emits it as an error rather than waiting for more data. (An error from the last few bytes of a chunk may only be reported once the next chunk arrives.)
 
 ## Performance
 Cbor-x is fast. Really fast. Here is comparison with the next fastest JS projects using the benchmark tool from `msgpack-lite` (and the sample data is from some clinical research data we use that has a good mix of different value types and structures). It also includes comparison to V8 native JSON functionality, and JavaScript Avro (`avsc`, a very optimized Avro implementation):
