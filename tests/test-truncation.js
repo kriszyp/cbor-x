@@ -267,8 +267,13 @@ suite('incomplete input in streams', function () {
 	})
 
 	test('an invalid maxIncompleteBufferSize', () => {
-		assert.throws(() => new DecoderStream({ maxIncompleteBufferSize: NaN }), TypeError)
-		assert.throws(() => decodeIter([], { maxIncompleteBufferSize: -1 }), TypeError)
+		for (const maxIncompleteBufferSize of [NaN, -1, null, '100', 100n]) {
+			assert.throws(() => new DecoderStream({ maxIncompleteBufferSize }), TypeError)
+			assert.throws(() => decodeIter([], { maxIncompleteBufferSize }), TypeError)
+		}
+		const encoded = new Encoder().encode(Buffer.alloc(200, 1))
+		assert.deepStrictEqual([...decodeIter(split(encoded, 25), { maxIncompleteBufferSize: 300.5 })], [Buffer.alloc(200, 1)])
+		assert.deepStrictEqual([...decodeIter(split(encoded, 25), { maxIncompleteBufferSize: Infinity })], [Buffer.alloc(200, 1)])
 	})
 
 	test('a failure to copy the incomplete bytes errors through the stream', async () => {

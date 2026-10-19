@@ -82,13 +82,17 @@ export function decodeIter (bufferIterator, options = {}) {
 /**
  * Keeps the bytes of a value that a chunk of a stream ends inside of, for DecoderStream and decodeIter, and decodes
  * them again once enough have arrived to possibly complete it. Callers decode a chunk with decodeAfterIncomplete if
- * buffer is set, or else directly with decodeMultiple, and pass any error to keepIncomplete.
+ * buffer is set, or else directly with decodeMultiple, and pass any error to keepIncomplete, which returns the error
+ * to report, if any. end returns an error if the input ended inside a value.
  */
 export class ChunkDecoder {
   constructor (decoder, maxIncompleteBufferSize) {
     this.decoder = decoder
-    this.maxIncompleteBufferSize = maxIncompleteBufferSize !== undefined ? maxIncompleteBufferSize : 0x4000000
-    if (!(this.maxIncompleteBufferSize >= 0)) throw new TypeError('maxIncompleteBufferSize must be a non-negative number')
+    if (maxIncompleteBufferSize === undefined) maxIncompleteBufferSize = 0x4000000
+    if (typeof maxIncompleteBufferSize !== 'number' || !(maxIncompleteBufferSize >= 0)) {
+      throw new TypeError('maxIncompleteBufferSize must be a non-negative number')
+    }
+    this.maxIncompleteBufferSize = Math.floor(maxIncompleteBufferSize)
     // buffer[0, bufferEnd) is the incomplete value; no decoded value is a view of buffer while it is kept here
     this.buffer = null
     this.bufferEnd = 0
@@ -121,7 +125,6 @@ export class ChunkDecoder {
     return values
   }
 
-  // Returns the error to report instead, if the error is fatal or the incomplete value exceeds maxIncompleteBufferSize
   keepIncomplete (error, chunk) {
     if (!error.incomplete) return this.fail(error)
     const source = this.buffer ? this.buffer.subarray(0, this.bufferEnd) : chunk
@@ -142,7 +145,6 @@ export class ChunkDecoder {
     this.neededLength = error.neededEnd ? error.neededEnd - error.lastPosition : length + 1
   }
 
-  // Returns an error if the input ended inside a value
   end () {
     if (this.buffer) {
       const error = this.fail(new Error('Unexpected end of CBOR data'))
