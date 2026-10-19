@@ -88,74 +88,67 @@ export class ChunkDecoder {
   constructor (decoder, maxIncompleteBufferSize) {
     this.decoder = decoder
     this.maxIncompleteBufferSize = maxIncompleteBufferSize !== undefined ? maxIncompleteBufferSize : 0x4000000
-    // the incomplete value is buffer[bufferStart, bufferEnd); bytes before bufferStart may be referenced by values
-    // already decoded, so they are never overwritten
+    if (!(this.maxIncompleteBufferSize >= 0)) throw new TypeError('maxIncompleteBufferSize must be a non-negative number')
+    // buffer[0, bufferEnd) is the incomplete value; no decoded value is a view of buffer while it is kept here
     this.buffer = null
-    this.bufferStart = 0
     this.bufferEnd = 0
+    this.appends = 0
     this.neededLength = 0 // a lower bound on the incomplete value's length
   }
 
   decodeAfterIncomplete (chunk) {
-    if (!(chunk instanceof Uint8Array)) throw new TypeError('Source must be a Uint8Array or Buffer')
-    const length = this.bufferEnd - this.bufferStart + chunk.length
-    if (length < this.neededLength) {
-      // still incomplete, so all of these bytes belong to the incomplete value
-      if (length > this.maxIncompleteBufferSize) throw maxIncompleteBufferSizeError()
-      // grown geometrically, so that the bytes are copied a bounded number of times however small the chunks are
-      this.append(chunk, Math.min(length * 2, this.maxIncompleteBufferSize))
-      return []
+    if (!(ArrayBuffer.isView(chunk) && chunk.BYTES_PER_ELEMENT === 1)) {
+      throw new TypeError('Source must be a Uint8Array or Buffer')
     }
-    this.append(chunk, length)
-    const values = this.decoder.decodeMultiple(this.buffer.subarray(this.bufferStart, this.bufferEnd))
+    const length = this.bufferEnd + chunk.length
+    if (length < this.neededLength && length > this.maxIncompleteBufferSize) throw maxIncompleteBufferSizeError()
+    if (length > this.buffer.length) {
+      // Values usually complete within two appends, which are sized exactly. After that the buffer grows by at least
+      // the bytes already kept, so that they are copied a bounded number of times however small the chunks are.
+      const size = this.appends < 2 ? length
+        : Math.max(length, Math.min(length + this.bufferEnd, this.maxIncompleteBufferSize))
+      const buffer = Buffer.allocUnsafe(size)
+      if (size > length) buffer.fill(0, length) // decoded values are views of this buffer, so no uninitialized memory
+      buffer.set(this.buffer.subarray(0, this.bufferEnd))
+      this.buffer = buffer
+    }
+    this.buffer.set(chunk, this.bufferEnd)
+    this.bufferEnd = length
+    this.appends++
+    if (length < this.neededLength) return []
+    const values = this.decoder.decodeMultiple(this.buffer.subarray(0, length))
     this.buffer = null
     return values
   }
 
-  /**
-   * Keeps the incomplete value from an error decoding the chunk. Returns the error to report instead if it is fatal,
-   * or if the incomplete value is larger than maxIncompleteBufferSize.
-   */
+  // Returns the error to report instead, if the error is fatal or the incomplete value exceeds maxIncompleteBufferSize
   keepIncomplete (error, chunk) {
     if (!error.incomplete) return this.fail(error)
-    const start = (this.buffer ? this.bufferStart : 0) + error.lastPosition
-    const length = (this.buffer ? this.bufferEnd : chunk.length) - start
+    const source = this.buffer ? this.buffer.subarray(0, this.bufferEnd) : chunk
+    const length = source.length - error.lastPosition
     if (length > this.maxIncompleteBufferSize) return this.fail(maxIncompleteBufferSizeError())
-    if (this.buffer) {
-      this.bufferStart = start
-    } else {
-      if (length === 0) return // an empty chunk
-      // copied, so that a short remainder does not keep the whole chunk in memory
-      this.buffer = Buffer.from(chunk.subarray(start))
-      this.bufferStart = 0
+    if (!this.buffer || error.lastPosition > 0) {
+      if (length === 0) return
+      try {
+        // copied, so that the remainder does not keep in memory the chunk, or the buffer that the values before it
+        // are views of
+        this.buffer = Buffer.from(source.subarray(error.lastPosition))
+      } catch (copyError) {
+        return this.fail(copyError)
+      }
       this.bufferEnd = length
+      this.appends = 0
     }
     this.neededLength = error.neededEnd ? error.neededEnd - error.lastPosition : length + 1
   }
 
-  /**
-   * Returns an error if the input ended inside a value.
-   */
+  // Returns an error if the input ended inside a value
   end () {
     if (this.buffer) {
       const error = this.fail(new Error('Unexpected end of CBOR data'))
       error.incomplete = true
       return error
     }
-  }
-
-  append (chunk, capacity) {
-    const length = this.bufferEnd - this.bufferStart + chunk.length
-    if (this.bufferEnd + chunk.length > this.buffer.length) {
-      const buffer = Buffer.allocUnsafe(Math.max(length, capacity))
-      buffer.fill(0, length) // decoded values are views of this buffer, so it must not expose uninitialized memory
-      buffer.set(this.buffer.subarray(this.bufferStart, this.bufferEnd))
-      this.buffer = buffer
-      this.bufferEnd -= this.bufferStart
-      this.bufferStart = 0
-    }
-    this.buffer.set(chunk, this.bufferEnd)
-    this.bufferEnd += chunk.length
   }
 
   fail (error) {

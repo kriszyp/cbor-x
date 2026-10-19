@@ -2,6 +2,7 @@ import { Decoder, decode, decodeMultiple, setSizeLimits, addExtension } from '..
 import { Encoder } from '../encode.js'
 import { DecoderStream, decodeIter } from '../node-index.js'
 import { Readable, Writable } from 'stream'
+import vm from 'vm'
 import { pipeline } from 'stream/promises'
 import { assert } from 'chai'
 
@@ -122,7 +123,6 @@ function countDecodeMultiple(decoder) {
 	return counter
 }
 
-// Writes the chunks to a DecoderStream, then ends it if end is true; resolves once it finishes or fails
 async function streamChunks(chunks, { end = true, ...options } = {}) {
 	const stream = new DecoderStream(options)
 	const counter = countDecodeMultiple(stream.decoder)
@@ -223,7 +223,7 @@ suite('incomplete input in streams', function () {
 		}
 	})
 
-	test('values already emitted are not overwritten by later chunks', async () => {
+	test('the bytes kept for an incomplete value are not shared with values already emitted', async () => {
 		const first = Buffer.alloc(30000, 1)
 		const second = Buffer.alloc(30000, 2)
 		const encoded = Buffer.concat([first, second].map(value => new Encoder().encode(value)))
@@ -234,12 +234,55 @@ suite('incomplete input in streams', function () {
 		stream.on('data', value => received.push(value))
 		for (const chunk of chunks.slice(0, 4)) stream.write(chunk)
 		await new Promise(resolve => setImmediate(resolve))
-		// the third chunk completed the first value in the buffer's free space and ended inside the second, which the
-		// fourth chunk extended in that same buffer
-		assert.strictEqual(stream.chunkDecoder.buffer.buffer, received[0].buffer)
+		assert.strictEqual(received.length, 1)
+		assert.notStrictEqual(stream.chunkDecoder.buffer.buffer, received[0].buffer,
+			'the remainder of the third chunk does not keep the buffer of the first value in memory')
 		stream.end(chunks[4])
 		await new Promise(resolve => stream.on('finish', resolve))
 		assert.deepStrictEqual(received, [first, second])
+	})
+
+	test('the bytes of an incomplete value are copied a bounded number of times', async () => {
+		// only the string being read at the end of each chunk has a declared length, so the stream decodes on every chunk
+		const value = new Array(2000).fill('x'.repeat(500))
+		const stream = new DecoderStream()
+		const received = []
+		stream.on('data', value => received.push(value))
+		const buffers = new Set()
+		for (const chunk of split(new Encoder().encode(value), 16384)) {
+			stream.write(chunk)
+			if (stream.chunkDecoder.buffer) buffers.add(stream.chunkDecoder.buffer)
+		}
+		await new Promise(resolve => setImmediate(resolve))
+		assert.deepStrictEqual(received, [value])
+		assert.isAtMost(buffers.size, 8, 'grown geometrically over 62 chunks')
+	})
+
+	test('a Uint8Array from another realm after incomplete input', async () => {
+		const encoded = new Encoder().encode('hello world')
+		const { received, error } = await streamChunks([encoded.subarray(0, 5),
+			vm.runInNewContext('bytes => new Uint8Array(bytes)')([...encoded.subarray(5)])])
+		assert.isUndefined(error)
+		assert.deepStrictEqual(received, ['hello world'])
+	})
+
+	test('an invalid maxIncompleteBufferSize', () => {
+		assert.throws(() => new DecoderStream({ maxIncompleteBufferSize: NaN }), TypeError)
+		assert.throws(() => decodeIter([], { maxIncompleteBufferSize: -1 }), TypeError)
+	})
+
+	test('a failure to copy the incomplete bytes errors through the stream', async () => {
+		const chunk = Buffer.from([0x01, 0x82, 0x01])
+		const from = Buffer.from
+		Buffer.from = () => { throw new RangeError('Array buffer allocation failed') }
+		let result
+		try {
+			result = await streamChunks([chunk], { end: false })
+		} finally {
+			Buffer.from = from
+		}
+		assert.deepStrictEqual(result.received, [1])
+		assert.strictEqual(result.error?.message, 'Array buffer allocation failed')
 	})
 
 	test('empty chunks', async () => {
