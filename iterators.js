@@ -47,7 +47,7 @@ export function decodeIter (bufferIterator, options = {}) {
   }
 
   const decoder = new Decoder(options)
-  let incomplete
+  let incomplete, fatalError
   const parser = (chunk) => {
     let yields
     // if there's incomplete data from previous chunk, concatinate and try again
@@ -59,26 +59,28 @@ export function decodeIter (bufferIterator, options = {}) {
     try {
       yields = decoder.decodeMultiple(chunk)
     } catch (err) {
+      yields = err.values
       if (err.incomplete) {
         incomplete = chunk.slice(err.lastPosition)
-        yields = err.values
       } else {
-        throw err
+        fatalError = err
       }
     }
-    return yields
+    return yields || []
   }
 
   if (typeof bufferIterator[Symbol.iterator] === 'function') {
     return (function * iter () {
       for (const value of bufferIterator) {
         yield * parser(value)
+        if (fatalError) throw fatalError
       }
     })()
   } else if (typeof bufferIterator[Symbol.asyncIterator] === 'function') {
     return (async function * iter () {
       for await (const value of bufferIterator) {
         yield * parser(value)
+        if (fatalError) throw fatalError
       }
     })()
   }
