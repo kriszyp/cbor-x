@@ -81,6 +81,38 @@ suite('decode malformed containers', function () {
     assert.isBelow((process.memoryUsage().heapUsed - before) / 1048576, 50, 'heap growth in MB')
   })
 
+  test('nested arrays each claiming the remaining bytes do not allocate', () => {
+    // every header declares exactly the bytes left after it, so each container passes the
+    // "length within remaining source" check, yet a preallocated slot per element would let a
+    // few kilobytes of headers retain gigabytes across the nesting chain
+    const size = 40000
+    const payload = Buffer.alloc(size)
+    for (let p = 0; p + 5 <= size; p += 5) {
+      payload[p] = 0x9a
+      payload.writeUInt32BE(size - (p + 5), p + 1)
+    }
+    let before = process.memoryUsage().heapUsed
+    assert.throws(() => decode(payload))
+    assert.isBelow((process.memoryUsage().heapUsed - before) / 1048576, 50, 'heap growth in MB')
+  })
+
+  test('nested arrays that each fit the source but sum past it do not allocate', () => {
+    // array16 headers declaring 65535 elements, and array8 headers declaring 255, each fit the remaining bytes
+    // on their own; without a shared budget every level preallocates its full length
+    for (const [header, depth] of [[[0x99, 0xff, 0xff], 600], [[0x98, 0xff], 4000]]) {
+      const payload = Buffer.alloc(0xffff + depth * header.length + 16)
+      for (let i = 0; i < depth; i++) payload.set(header, i * header.length)
+      let before = process.memoryUsage().heapUsed
+      assert.throws(() => decode(payload))
+      assert.isBelow((process.memoryUsage().heapUsed - before) / 1048576, 2, 'heap growth in MB')
+    }
+  })
+
+  test('arrays nested within the byte budget still decode', () => {
+    const value = [Array.from({ length: 300 }, (_, i) => [i, [i, i + 1]]), new Array(1000).fill(7)]
+    assert.deepStrictEqual(decode(encode(value)), value)
+  })
+
   test('truncated data reports an incomplete error', () => {
     for (const bytes of [[0x9a, 0x01, 0x31, 0x2d, 0x00], [0x9f], [0xbf], [0x98, 0x18]]) {
       try {

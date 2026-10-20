@@ -212,8 +212,10 @@ export function getPosition() {
 	return position
 }
 const nestedDecodeErrors = new WeakSet()
+let arrayAllocationBudget
 export function checkedRead() {
 	try {
+		arrayAllocationBudget = srcEnd - position
 		let result = read()
 		if (bundledStrings) {
 			if (position >= bundledStrings.postBundlePosition)
@@ -403,7 +405,9 @@ export function read() {
 			if (token > maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 			// every element occupies at least one byte, so a length beyond what remains in the source can
 			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
-			if (token > srcEnd - position) throw endOfCBORError()
+			// nested arrays each pass the check above yet still preallocate, so also spend from a
+			// per-decode budget of the remaining bytes; the summed lengths of any valid tree stay under it
+			if (token > srcEnd - position || (arrayAllocationBudget -= token) < 0) throw endOfCBORError()
 			let array = new Array(token)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
@@ -1304,6 +1308,7 @@ function saveState(callback) {
 	let savedDecoder = currentDecoder
 	let savedSequentialMode = sequentialMode
 	let savedRestoreMapsAsObject = restoreMapsAsObject
+	let savedArrayAllocationBudget = arrayAllocationBudget
 	restoreMapsAsObject = false
 	try {
 		return callback()
@@ -1322,6 +1327,7 @@ function saveState(callback) {
 		currentStructures = savedStructures
 		currentDecoder = savedDecoder
 		restoreMapsAsObject = savedRestoreMapsAsObject
+		arrayAllocationBudget = savedArrayAllocationBudget
 		dataView = new DataView(src.buffer, src.byteOffset, src.byteLength)
 	}
 }
