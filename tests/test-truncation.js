@@ -304,6 +304,15 @@ suite('incomplete input in streams', function () {
 		assert.strictEqual(calls, 2)
 	})
 
+	test('empty chunks do not decode again when the allocation budget rejected an array', async () => {
+		// the inner array passes its length check but exhausts the budget, so its bound is already met by the bytes held
+		const { received, error, calls } = await streamChunks([Buffer.from([0x84, 0x83, 0, 0, 0, 0]),
+			...new Array(1000).fill(Buffer.alloc(0)), Buffer.from([0, 0])])
+		assert.isUndefined(error)
+		assert.deepStrictEqual(received, [[[0, 0, 0], 0, 0, 0]])
+		assert.strictEqual(calls, 2)
+	})
+
 	test('#155: a stream that ends inside a value errors', async () => {
 		const { received, error } = await streamChunks([Buffer.from([0x01, 0x82, 0x01])])
 		assert.deepStrictEqual(received, [1])

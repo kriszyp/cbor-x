@@ -142,7 +142,7 @@ export class ChunkDecoder {
       this.bufferEnd = length
       this.appends = 0
     }
-    this.neededLength = error.neededEnd ? error.neededEnd - error.lastPosition : length + 1
+    this.neededLength = Math.max(length + 1, error.neededEnd ? error.neededEnd - error.lastPosition : 0)
   }
 
   end () {
