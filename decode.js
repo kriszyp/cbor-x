@@ -257,9 +257,14 @@ export function checkedRead() {
 	}
 }
 
-function endOfCBORError() {
+// neededEnd, from a length check, is a position that the source must extend to before the item can decode. It is a
+// lower bound for any completion of the source: every byte read before the check was within the source, so a longer
+// source reaches the same check with the same length. Streams wait for it instead of decoding on every chunk.
+function endOfCBORError(neededEnd) {
 	let error = new Error('Unexpected end of CBOR data')
 	error.incomplete = true
+	if (neededEnd)
+		error.neededEnd = neededEnd
 	return error
 }
 
@@ -387,13 +392,13 @@ export function read() {
 		case 1: // negative int
 			return ~token
 		case 2: // buffer
-			if (token > srcEnd - position) throw endOfCBORError()
+			if (token > srcEnd - position) throw endOfCBORError(position + token)
 			return readBin(token)
 		case 3: // string
 			if (srcStringEnd >= position) { // already extracted, which only covers complete strings
 				return srcString.slice(position - srcStringStart, (position += token) - srcStringStart)
 			}
-			if (token > srcEnd - position) throw endOfCBORError()
+			if (token > srcEnd - position) throw endOfCBORError(position + token)
 			if (srcStringEnd == 0 && srcEnd < 140 && token < 32) {
 				// for small blocks, avoiding the overhead of the extract call is helpful
 				let string = token < 16 ? shortStringInJS(token) : longStringInJS(token)
@@ -407,7 +412,7 @@ export function read() {
 			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
 			// nested arrays each pass the check above yet still preallocate, so also spend from a
 			// per-decode budget of the remaining bytes; the summed lengths of any valid tree stay under it
-			if (token > srcEnd - position || (arrayAllocationBudget -= token) < 0) throw endOfCBORError()
+			if (token > srcEnd - position || (arrayAllocationBudget -= token) < 0) throw endOfCBORError(position + token)
 			let array = new Array(token)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
@@ -416,7 +421,7 @@ export function read() {
 		case 5: // map
 			if (currentDecoder.mapsAsObjects) {
 				if (token > objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
-				if (token > (srcEnd - position) / 2) throw endOfCBORError() // each entry needs at least two bytes
+				if (token > (srcEnd - position) / 2) throw endOfCBORError(position + 2 * token) // each entry needs at least two bytes
 				let object = {}
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) object[safeKey(currentDecoder.decodeKey(read()))] = read()
 				else for (let i = 0; i < token; i++) object[safeKey(read())] = read()
@@ -427,7 +432,7 @@ export function read() {
 					restoreMapsAsObject = false
 				}
 				if (token > maxMapSize) throw new Error(`Map size exceeds ${maxMapSize}`)
-				if (token > (srcEnd - position) / 2) throw endOfCBORError()
+				if (token > (srcEnd - position) / 2) throw endOfCBORError(position + 2 * token)
 				let map = new Map()
 				if (currentDecoder.keyMap) for (let i = 0; i < token; i++) map.set(currentDecoder.decodeKey(read()),read())
 				else for (let i = 0; i < token; i++) map.set(read(), read())

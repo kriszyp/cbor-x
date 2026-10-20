@@ -66,7 +66,7 @@ import { Transform, Readable } from 'stream'
 
 export as namespace CBOR;
 export class DecoderStream extends Transform {
-	constructor(options?: Options | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean })
+	constructor(options?: Options & { maxIncompleteBufferSize?: number } | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean, maxIncompleteBufferSize?: number })
 }
 export class EncoderStream extends Transform {
 	constructor(options?: Options | { highWaterMark: number, emitClose: boolean, allowHalfOpen: boolean })
