@@ -212,8 +212,10 @@ export function getPosition() {
 	return position
 }
 const nestedDecodeErrors = new WeakSet()
+let arrayAllocationBudget
 export function checkedRead() {
 	try {
+		arrayAllocationBudget = srcEnd - position
 		let result = read()
 		if (bundledStrings) {
 			if (position >= bundledStrings.postBundlePosition)
@@ -403,11 +405,10 @@ export function read() {
 			if (token > maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 			// every element occupies at least one byte, so a length beyond what remains in the source can
 			// never be satisfied; check before allocating so a tiny header can not force a huge allocation
-			if (token > srcEnd - position) throw endOfCBORError()
-			// a large declared length still passes the check above when nested arrays each claim the
-			// bytes a deeper one consumes, so preallocate only small lengths and grow the rest lazily,
-			// keeping cumulative allocation bounded to the elements actually decoded
-			let array = new Array(token < 0x100 ? token : 0)
+			// nested arrays each pass the check above yet still preallocate, so also spend from a
+			// per-decode budget of the remaining bytes; the summed lengths of any valid tree stay under it
+			if (token > srcEnd - position || (arrayAllocationBudget -= token) < 0) throw endOfCBORError()
+			let array = new Array(token)
 		  //if (currentDecoder.keyMap) for (let i = 0; i < token; i++) array[i] = currentDecoder.decodeKey(read())	
 			//else 
 			for (let i = 0; i < token; i++) array[i] = read()
@@ -1307,6 +1308,7 @@ function saveState(callback) {
 	let savedDecoder = currentDecoder
 	let savedSequentialMode = sequentialMode
 	let savedRestoreMapsAsObject = restoreMapsAsObject
+	let savedArrayAllocationBudget = arrayAllocationBudget
 	restoreMapsAsObject = false
 	try {
 		return callback()
@@ -1325,6 +1327,7 @@ function saveState(callback) {
 		currentStructures = savedStructures
 		currentDecoder = savedDecoder
 		restoreMapsAsObject = savedRestoreMapsAsObject
+		arrayAllocationBudget = savedArrayAllocationBudget
 		dataView = new DataView(src.buffer, src.byteOffset, src.byteLength)
 	}
 }
