@@ -14,6 +14,7 @@ const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
 const STOP_CODE = {}
+let allowBreak = false
 let maxArraySize = 112810000 // This is the maximum array size in V8. We would potentially detect and set it higher
 // for JSC, but this is pretty large and should be sufficient for most use cases
 let maxMapSize = 16810000 // JavaScript has a fixed maximum map size of about 16710000, but JS itself enforces this,
@@ -271,6 +272,8 @@ function endOfCBORError(neededEnd) {
 export function read() {
 	// compared as < so that a NaN position (from a corrupt length) also throws instead of reading undefined
 	if (!(position < srcEnd)) throw endOfCBORError()
+	let breakAllowed = allowBreak
+	allowBreak = false
 	let token = src[position++]
 	let majorType = token >> 5
 	token = token & 0x1f
@@ -328,7 +331,7 @@ export function read() {
 					case 4: // array
 						let array = []
 						let value, i = 0
-						while ((value = read()) != STOP_CODE) {
+						while ((allowBreak = true, value = read()) != STOP_CODE) {
 							if (i >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 							array[i++] = value
 						}
@@ -339,13 +342,13 @@ export function read() {
 							let object = {}
 							let i = 0;
 							if (currentDecoder.keyMap) {
-								while((key = read()) != STOP_CODE) {
+								while((allowBreak = true, key = read()) != STOP_CODE) {
 									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(currentDecoder.decodeKey(key))] = read()
 								}
 							}
 							else {
-								while ((key = read()) != STOP_CODE) {
+								while ((allowBreak = true, key = read()) != STOP_CODE) {
 									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(key)] = read()
 								}
@@ -359,7 +362,7 @@ export function read() {
 							let map = new Map()
 							if (currentDecoder.keyMap) {
 								let i = 0;
-								while((key = read()) != STOP_CODE) {
+								while((allowBreak = true, key = read()) != STOP_CODE) {
 									if (i++ >= maxMapSize) {
 										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
@@ -368,7 +371,7 @@ export function read() {
 							}
 							else {
 								let i = 0;
-								while ((key = read()) != STOP_CODE) {
+								while ((allowBreak = true, key = read()) != STOP_CODE) {
 									if (i++ >= maxMapSize) {
 										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
@@ -378,7 +381,9 @@ export function read() {
 							return map
 						}
 					case 7:
-						return STOP_CODE
+						if (breakAllowed)
+							return STOP_CODE
+						throw new Error('Unexpected break stop code outside of an indefinite-length item')
 					default:
 						throw new Error('Invalid major type for indefinite length ' + majorType)
 				}

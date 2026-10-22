@@ -162,6 +162,15 @@ suite('CBOR basic tests', function(){
 		assert.throws(() => CBOR.decode(Buffer.from('7a10000000', 'hex')));
 	})
 
+	test('break stop code outside indefinite-length item', function() {
+		assert.throws(() => CBOR.decode(Buffer.from('ff', 'hex')))
+		assert.throws(() => CBOR.decode(Buffer.from('81ff', 'hex')))
+		assert.throws(() => CBOR.decode(Buffer.from('a16161ff', 'hex')))
+		assert.throws(() => CBOR.decode(Buffer.from('c0ff', 'hex')))
+		assert.deepEqual(CBOR.decode(Buffer.from('9f01ff', 'hex')), [1])
+		assert.deepEqual(CBOR.decode(Buffer.from('bf616101ff', 'hex')), { a: 1 })
+	})
+
 	test('overlong encoding', function() {
 		const payload = Buffer.from([0x62, 0xc0, 0xaf])
 		const result = CBOR.decode(payload)
