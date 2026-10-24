@@ -174,18 +174,34 @@ export class Decoder {
 		return checkedRead()
 	}
 	decodeMultiple(source, forEach) {
+		if (src) {
+			// Keep the complete nested sequence inside its own decoder state.
+			return saveState(() => {
+				clearSource()
+				try {
+					return this ? this.decodeMultiple(source, forEach) : defaultDecoder.decodeMultiple(source, forEach)
+				} catch (error) {
+					if (error && typeof error == 'object')
+						nestedDecodeErrors.add(error)
+					throw error
+				}
+			})
+		}
 		let values, lastPosition = 0
 		try {
 			let size = source.length
 			sequentialMode = true
 			let value = this ? this.decode(source, size) : defaultDecoder.decode(source, size)
 			if (forEach) {
+				let end = position
 				if (forEach(value) === false) {
 					return
 				}
-				while(position < size) {
-					lastPosition = position
-					if (forEach(checkedRead()) === false) {
+				while(end < size) {
+					lastPosition = end
+					value = checkedRead()
+					end = position
+					if (forEach(value) === false) {
 						return
 					}
 				}
