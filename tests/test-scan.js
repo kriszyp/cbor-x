@@ -267,6 +267,14 @@ suite('resumable structure scan', function () {
       const result = await streamDecode([Buffer.from([0x81]), Buffer.concat([Buffer.from([1]), bytes])])
       assert.isUndefined(result.error)
       assert.deepStrictEqual(result.values, [[1], [1, 2, 3]])
+      const catching = read => {
+        const first = read()
+        try { read() } catch (error) {}
+        return first
+      }
+      catching.handlesRead = true
+      addExtension({ tag: 41000, decode: catching })
+      assert.throws(() => [...decodeIter([bytes.subarray(0, 2), bytes.subarray(2)])], message)
     } finally {
       addExtension({ tag: 41000, decode: value => value })
     }
