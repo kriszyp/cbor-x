@@ -140,8 +140,8 @@ export class StructureScanner {
       if (frame.kind === 'definition') {
         const index = frame.total - frame.remaining
         if (index === 0 && major === 0) frame.id = argument
-        if ((index === 1 || (frame.multiple && index < frame.total - 1)) && major === 4 && info !== 31 && frame.id !== undefined) {
-          this.records.set((frame.id + (frame.multiple ? index - 1 : 0)) & 0x1fff, { length: argument, slowReads: 0, compiled: new Set() })
+        if ((frame.multiple ? index >= 1 && index < frame.total - 1 : index === 1) && major === 4 && info !== 31 && frame.id !== undefined) {
+          this.records.set(frame.id - 0xe000 + (frame.multiple ? index - 1 : 0), { length: argument, slowReads: 0, compiled: new Set() })
         }
       }
       if (major === 7 && info === 31 && (frame.remaining === -1 || frame.remaining === -2)) {
