@@ -442,6 +442,19 @@ suite('CBOR basic tests', function(){
 		assert.equal(decode(new Uint8Array([0xF9, 0xFC, 0])), -Infinity);
 		assert.isNaN(decode(new Uint8Array([0xF9, 0x7E, 0])));
 	});
+	test('decimal fractions and bigfloats', function() {
+		// [4([-2, 27315]), 5([30, 1]), 5([-1, 3])]
+		assert.deepEqual(decode(Buffer.from('83c48221196ab3c582181e01c5822003', 'hex')), [273.15, 1073741824, 1.5]);
+		// 4([512, 1]) and 5([1024, 1]) do not fit in a double
+		let tag = decode(Buffer.from('c48219020001', 'hex'));
+		assert.instanceOf(tag, CBOR.Tag);
+		assert.equal(tag.tag, 4);
+		assert.deepEqual(tag.value, [512, 1]);
+		tag = decode(Buffer.from('c58219040001', 'hex'));
+		assert.instanceOf(tag, CBOR.Tag);
+		assert.equal(tag.tag, 5);
+		assert.deepEqual(tag.value, [1024, 1]);
+	});
 	test('structured cloning: types', function() {
 		let b = typeof Buffer != 'undefined' ? Buffer.alloc(20) : new Uint8Array(20)
 		let fa = new Float32Array(b.buffer, 8, 2)
