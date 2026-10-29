@@ -54,6 +54,8 @@ The `EncoderStream` and `DecoderStream` instances  will have also the record str
 
 When a chunk ends inside a value, `DecoderStream` keeps the bytes of that value until the chunks that complete it arrive. The `maxIncompleteBufferSize` option limits how many bytes it keeps for one incomplete value (default 64 MB, `0x4000000`); past that, the stream emits a "Maximum incomplete buffer size exceeded" error. A value larger than this limit still decodes when it arrives in a single chunk, so raise the limit for streams that carry larger values. If the input ends inside a value, the stream emits an "Unexpected end of CBOR data" error with `incomplete: true`. `decodeIter` takes the same option and reports an incomplete final value the same way.
 
+Incomplete values are scanned incrementally without constructing objects, then decoded when their complete bytes arrive. This keeps decoding work linear in the size of a value split across many chunks. All built-in tags and custom extensions that consume one tagged CBOR item are supported. An undocumented custom `handlesRead` decoder that consumes multiple sibling items cannot be framed on fragmented input; it throws an error naming the tag. Whole-buffer decoding of these extensions is unchanged.
+
 ### Iterables
 In addition to using CBOR with streams, CBOR can also encode to an iterable that can be iterated as a sequence of binary chunks with `encodeAsIterable`, which facilitates progressive encoding:
 ```JavaScript

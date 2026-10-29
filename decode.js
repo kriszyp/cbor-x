@@ -1025,6 +1025,7 @@ currentExtensions[LEGACY_RECORD_INLINE_ID] = (data) => {
 	}
 	return object
 }
+const legacyRecordDefinition = currentExtensions[LEGACY_RECORD_INLINE_ID]
 currentExtensions[14] = (value) => {
 	if (bundledStrings)
 		return bundledStrings[0].slice(bundledStrings.position0, bundledStrings.position0 += value)
@@ -1297,6 +1298,8 @@ function loadShared() {
 }
 
 function saveState(callback) {
+	let savedFragmentEnd = fragmentEnd
+	fragmentEnd = 0
 	let savedSrcEnd = srcEnd
 	let savedPosition = position
 	let savedStringPosition = stringPosition
@@ -1318,6 +1321,7 @@ function saveState(callback) {
 	try {
 		return callback()
 	} finally {
+		fragmentEnd = savedFragmentEnd
 		srcEnd = savedSrcEnd
 		position = savedPosition
 		stringPosition = savedStringPosition
@@ -1342,8 +1346,50 @@ export function clearSource() {
 	currentStructures = null
 }
 
+const customReadExtensions = new Map()
+let fragmentEnd = 0
+
+export function isLegacyRecordTag(tag) {
+	return tag === LEGACY_RECORD_INLINE_ID && currentExtensions[tag] === legacyRecordDefinition
+}
+
+export function getScanTag(tag, decoder) {
+	return tag >= BUNDLED_STRINGS_ID && decoder.structures && decoder.structures[tag & 0x1fff]
+}
+
+export function decodeScanned(decoder, source, end) {
+	if (!customReadExtensions.size) return decoder.decodeMultiple(source)
+	const savedEnd = fragmentEnd
+	const originals = []
+	fragmentEnd = end
+	try {
+		for (const [tag, extension] of customReadExtensions) {
+			const original = currentExtensions[tag]
+			const guarded = (read) => {
+				if (!fragmentEnd || position >= fragmentEnd) return extension(read)
+				let calls = 0
+				return extension(() => {
+					if (calls++) throw new Error('Tag ' + tag + ': fragmented decoding cannot frame multi-item handlesRead extensions')
+					return read()
+				})
+			}
+			guarded.handlesRead = true
+			originals.push([tag, original, guarded])
+			currentExtensions[tag] = guarded
+		}
+		return decoder.decodeMultiple(source)
+	} finally {
+		fragmentEnd = savedEnd
+		for (const [tag, original, guarded] of originals) {
+			if (currentExtensions[tag] === guarded) currentExtensions[tag] = original
+		}
+	}
+}
+
 export function addExtension(extension) {
 	currentExtensions[extension.tag] = extension.decode
+	if (extension.decode.handlesRead) customReadExtensions.set(extension.tag, extension.decode)
+	else customReadExtensions.delete(extension.tag)
 }
 
 export function setSizeLimits(limits) {
