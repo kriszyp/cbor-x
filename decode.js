@@ -1367,11 +1367,16 @@ export function decodeScanned(decoder, source, end) {
 			const original = currentExtensions[tag]
 			const guarded = (read) => {
 				if (!fragmentEnd || position >= fragmentEnd) return extension(read)
-				let calls = 0
-				return extension(() => {
-					if (calls++) throw new Error('Tag ' + tag + ': fragmented decoding cannot frame multi-item handlesRead extensions')
+				let calls = 0, framingError
+				const value = extension(() => {
+					if (calls++) {
+						framingError = new Error('Tag ' + tag + ': fragmented decoding cannot frame multi-item handlesRead extensions')
+						throw framingError
+					}
 					return read()
 				})
+				if (framingError) throw framingError
+				return value
 			}
 			guarded.handlesRead = true
 			originals.push([tag, original, guarded])
