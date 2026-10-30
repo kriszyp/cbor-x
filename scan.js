@@ -246,6 +246,7 @@ export class StructureScanner {
       if (this.position >= this.postBundlePosition) throw new Error('Unexpected bundle position')
       this.position = this.postBundlePosition
     }
+    if (this.frames.length > 256) this.frames.length = 256
     return true
   }
 }

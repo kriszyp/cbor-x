@@ -1,6 +1,6 @@
 import { assert } from 'chai'
 import { performance } from 'node:perf_hooks'
-import { Decoder, Encoder, DecoderStream, decodeIter, addExtension, Tag, setSizeLimits } from '../node-index.js'
+import { Decoder, Encoder, DecoderStream, decodeIter, addExtension, Tag, setSizeLimits, isNativeAccelerationEnabled } from '../node-index.js'
 import { StructureScanner } from '../scan.js'
 import { execFileSync } from 'node:child_process'
 import { ChunkDecoder } from '../iterators.js'
@@ -179,7 +179,8 @@ suite('resumable structure scan', function () {
     assert.deepStrictEqual([...decodeIter(chunks(bytes, 1), { structures })], [{ a: 'hello' }])
   })
 
-  test('native string read-ahead cannot cross a scanned value into a truncated next value', async () => {
+  test('native string read-ahead cannot cross a scanned value into a truncated next value', async function () {
+    if (!isNativeAccelerationEnabled) this.skip()
     const message = new Encoder({ useRecords: false }).encode({ id: 123, name: 'x'.repeat(700), data: [1, 2, 3] })
     const bytes = Buffer.concat(new Array(1000).fill(message))
     for (const size of [127, 1024, 65536]) {
@@ -189,6 +190,40 @@ suite('resumable structure scan', function () {
       const streamed = await streamDecode(parts)
       assert.isUndefined(streamed.error)
       assert.deepStrictEqual(streamed.values, expected)
+    }
+  })
+
+  test('completed deep values release excess frame storage', async () => {
+    const bytes = Buffer.concat([Buffer.alloc(1000, 0x81), Buffer.from([1])])
+    const result = await streamDecode(chunks(bytes, 7))
+    assert.isUndefined(result.error)
+    assert.strictEqual(result.calls, 2)
+    assert.isAtMost(result.scanner.frames.length, 256)
+    let value = result.values[0]
+    for (let i = 0; i < 1000; i++) value = value[0]
+    assert.strictEqual(value, 1)
+  })
+
+  test('seeded nested values match whole decoding at varying split boundaries', async () => {
+    let seed = 0x12345678
+    const random = n => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n }
+    const value = depth => {
+      if (!depth) return [random(100000), 'α string '.repeat(random(8)), !!random(2), new Uint8Array([random(256)])][random(4)]
+      return random(2) ? Array.from({ length: random(4) }, () => value(depth - 1))
+        : { name: value(depth - 1), id: value(depth - 1) }
+    }
+    for (const options of [{ useRecords: true }, { pack: true }, { bundleStrings: true },
+      { keyMap: { name: 1, id: 2 } }, { useStringRefs: true }, { structuredClone: true }]) {
+      for (let i = 0; i < 24; i++) {
+        const bytes = new Encoder({ ...options }).encode(value(3))
+        const expected = [new Decoder({ ...options }).decode(bytes)]
+        const parts = chunks(bytes, 1 + random(Math.max(1, bytes.length - 1)))
+        assert.deepStrictEqual([...decodeIter(parts, { ...options })], expected)
+        const result = await streamDecode(parts, { ...options })
+        assert.isUndefined(result.error)
+        assert.deepStrictEqual(result.values, expected)
+        assert.isAtMost(result.calls, 2)
+      }
     }
   })
 
@@ -281,7 +316,7 @@ suite('resumable structure scan', function () {
       addExtension({ tag: 41000, decode: catching })
       assert.throws(() => [...decodeIter([bytes.subarray(0, 2), bytes.subarray(2)])], message)
     } finally {
-      addExtension({ tag: 41000, decode: value => value })
+      addExtension({ tag: 41000 })
     }
   })
 
@@ -441,8 +476,8 @@ suite('resumable structure scan', function () {
       const bytes = Buffer.from([0x82, 0xd9, 0xa0, 0x2a, 0x81, 1, 0xd9, 0xa0, 0x2a, 0x81, 2])
       assert.deepStrictEqual([...decodeIter(chunks(bytes, 1))], [[[[1], [1, 2]], [[2], [1, 2]]]])
     } finally {
-      addExtension({ tag: 41001, decode: value => value })
-      addExtension({ tag: 41002, decode: value => value })
+      addExtension({ tag: 41001 })
+      addExtension({ tag: 41002 })
     }
   })
 })
