@@ -1,4 +1,4 @@
-import { getScanTag, isLegacyRecordTag } from './decode.js'
+import { _stream } from './decode.js'
 
 // Positions are relative to the retained value, including bundle pointers. Frames and their storage survive appends.
 export class StructureScanner {
@@ -16,6 +16,8 @@ export class StructureScanner {
     this.neededLength = 0
     this.postBundlePosition = 0
     this.headers = 0
+    this.mapsAsObjects = this.decoder.mapsAsObjects !== false
+    this.restoreMap = false
     this.records.clear()
     this.readers.clear()
     this.push('items', 1)
@@ -28,6 +30,9 @@ export class StructureScanner {
     frame.remaining = remaining
     frame.stage = 0
     frame.id = undefined
+    frame.restoreMap = false
+    frame.limitMajor = 0
+    frame.count = 0
     this.depth++
     return frame
   }
@@ -118,7 +123,7 @@ export class StructureScanner {
         frame.remaining = this.argument
         const reader = frame.reader
         if (reader.compiled.has(this.argument)) frame.remaining = Math.min(this.argument, reader.length)
-        else if (reader.slowReads++ >= 2) {
+        else if (reader.slowReads++ >= _stream.readThreshold) {
           reader.compiled.add(this.argument)
           frame.remaining = Math.min(this.argument, reader.length)
         }
@@ -132,6 +137,10 @@ export class StructureScanner {
         continue
       }
       if (frame.remaining === 0) {
+        if (frame.restoreMap && this.restoreMap) {
+          this.mapsAsObjects = true
+          this.restoreMap = false
+        }
         this.depth--
         continue
       }
@@ -148,12 +157,23 @@ export class StructureScanner {
         this.depth--
         continue
       }
+      if (frame.limitMajor && (frame.remaining === -1 || frame.remaining === -2)) {
+        _stream.checkContainer(frame.limitMajor, ++frame.count, frame.mapsAsObjects)
+      }
       if (frame.remaining > 0) frame.remaining--
       else if (frame.remaining === -2) frame.remaining = -3
       else if (frame.remaining === -3) frame.remaining = -2
       if (info === 31) {
         if (major === 2 || major === 3) throw new Error('Indefinite length not supported for byte or text strings')
-        if (major === 4 || major === 5) this.push('items', major === 4 ? -1 : -2)
+        if (major === 4 || major === 5) {
+          const container = this.push('items', major === 4 ? -1 : -2)
+          container.limitMajor = major
+          container.mapsAsObjects = this.mapsAsObjects
+          if (major === 5 && this.restoreMap) {
+            this.mapsAsObjects = true
+            this.restoreMap = false
+          }
+        }
         else if (major !== 7) throw new Error('Invalid major type for indefinite length ' + major)
         continue
       }
@@ -164,10 +184,15 @@ export class StructureScanner {
           break
         case 4:
         case 5:
+          _stream.checkContainer(major, argument, this.mapsAsObjects)
+          if (major === 5 && this.restoreMap) {
+            this.mapsAsObjects = true
+            this.restoreMap = false
+          }
           if (argument) this.push('items', major === 5 ? argument * 2 : argument)
           break
         case 6: {
-          const structure = getScanTag(argument, this.decoder)
+          const structure = _stream.getTag(argument, this.decoder)
           let reader = this.records.get(argument & 0x1fff)
           if (argument >= 0xdff9 && (structure || reader)) {
             if (!reader) {
@@ -183,7 +208,11 @@ export class StructureScanner {
             this.push('bundle')
           } else if (argument === 0xdfff || argument === 0xdffe) {
             this.push('definition').multiple = argument === 0xdffe
-          } else if (isLegacyRecordTag(argument)) {
+          } else if (argument === 259 && _stream.isBuiltinTag(argument) && this.mapsAsObjects) {
+            this.push('items', 1).restoreMap = true
+            this.mapsAsObjects = false
+            this.restoreMap = true
+          } else if (argument === 105 && _stream.isBuiltinTag(argument)) {
             this.push('definition').multiple = false
           } else {
             this.push('items', 1)

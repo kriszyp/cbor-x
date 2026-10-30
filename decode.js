@@ -1299,7 +1299,11 @@ function loadShared() {
 
 function saveState(callback) {
 	let savedFragmentEnd = fragmentEnd
+	let savedFragmentReader = fragmentReadString
+	let savedReadFixedString = readFixedString
 	fragmentEnd = 0
+	if (fragmentReadString) readFixedString = fragmentReadString
+	fragmentReadString = null
 	let savedSrcEnd = srcEnd
 	let savedPosition = position
 	let savedStringPosition = stringPosition
@@ -1322,6 +1326,8 @@ function saveState(callback) {
 		return callback()
 	} finally {
 		fragmentEnd = savedFragmentEnd
+		fragmentReadString = savedFragmentReader
+		readFixedString = savedReadFixedString
 		srcEnd = savedSrcEnd
 		position = savedPosition
 		stringPosition = savedStringPosition
@@ -1346,24 +1352,45 @@ export function clearSource() {
 	currentStructures = null
 }
 
-const customReadExtensions = new Map()
+const registeredExtensions = new Map()
 let fragmentEnd = 0
+let fragmentReadString
 
-export function isLegacyRecordTag(tag) {
-	return tag === LEGACY_RECORD_INLINE_ID && currentExtensions[tag] === legacyRecordDefinition
+const builtinScanTags = new Map([[LEGACY_RECORD_INLINE_ID, legacyRecordDefinition], [259, currentExtensions[259]]])
+function isBuiltinScanTag(tag) {
+	return builtinScanTags.has(tag) && currentExtensions[tag] === builtinScanTags.get(tag)
 }
 
-export function getScanTag(tag, decoder) {
+function getScanTag(tag, decoder) {
 	return tag >= BUNDLED_STRINGS_ID && decoder.structures && decoder.structures[tag & 0x1fff]
 }
 
-export function decodeScanned(decoder, source, end) {
-	if (!customReadExtensions.size) return decoder.decodeMultiple(source)
+function checkScanContainer(major, length, mapsAsObjects) {
+	if (major === 4) {
+		if (length > maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
+	} else if (mapsAsObjects) {
+		if (length > objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
+	} else if (length > maxMapSize) throw new Error(`Map size exceeds ${maxMapSize}`)
+}
+
+function decodeScanned(decoder, source, end) {
+	const boundStrings = isNativeAccelerationEnabled && end < source.length
+	if (!registeredExtensions.size && !boundStrings) return decoder.decodeMultiple(source)
 	const savedEnd = fragmentEnd
+	const savedReader = readFixedString
+	const savedFragmentReader = fragmentReadString
 	const originals = []
 	fragmentEnd = end
+	fragmentReadString = savedReader
 	try {
-		for (const [tag, extension] of customReadExtensions) {
+		if (boundStrings) readFixedString = (length) => {
+			if (!fragmentEnd || position >= fragmentEnd) return savedReader(length)
+			const savedSrcEnd = srcEnd
+			srcEnd = fragmentEnd
+			try { return savedReader(length) } finally { srcEnd = savedSrcEnd }
+		}
+		for (const [tag, extension] of registeredExtensions) {
+			if (!extension.handlesRead) continue
 			const original = currentExtensions[tag]
 			const guarded = (read) => {
 				if (!fragmentEnd || position >= fragmentEnd) return extension(read)
@@ -1385,16 +1412,27 @@ export function decodeScanned(decoder, source, end) {
 		return decoder.decodeMultiple(source)
 	} finally {
 		fragmentEnd = savedEnd
+		fragmentReadString = savedFragmentReader
+		readFixedString = savedReader
 		for (const [tag, original, guarded] of originals) {
 			if (currentExtensions[tag] === guarded) currentExtensions[tag] = original
 		}
 	}
 }
 
+// Internal streaming hooks; not part of the public decoder API.
+export const _stream = {
+	getTag: getScanTag,
+	isBuiltinTag: isBuiltinScanTag,
+	checkContainer: checkScanContainer,
+	decode: decodeScanned,
+	get readThreshold() { return inlineObjectReadThreshold }
+}
+
 export function addExtension(extension) {
 	currentExtensions[extension.tag] = extension.decode
-	if (extension.decode.handlesRead) customReadExtensions.set(extension.tag, extension.decode)
-	else customReadExtensions.delete(extension.tag)
+	if (typeof extension.decode === 'function') registeredExtensions.set(extension.tag, extension.decode)
+	else registeredExtensions.delete(extension.tag)
 }
 
 export function setSizeLimits(limits) {

@@ -1,5 +1,5 @@
 import { Encoder } from './encode.js'
-import { Decoder, decodeScanned } from './decode.js'
+import { Decoder, _stream } from './decode.js'
 import { StructureScanner } from './scan.js'
 
 /**
@@ -98,6 +98,9 @@ export class ChunkDecoder {
     this.buffer = null
     this.bufferEnd = 0
     this.appends = 0
+    this.scanner = null
+    this.scanned = false
+    this.resetScanner = false
     this.neededLength = 0 // a lower bound on the incomplete value's length
   }
 
@@ -132,19 +135,8 @@ export class ChunkDecoder {
       return []
     }
     this.scanned = true
-    const end = this.scanner.position
-    const values = decodeScanned(this.decoder, this.buffer.subarray(0, end), end)
+    const values = _stream.decode(this.decoder, this.buffer.subarray(0, length), this.scanner.position)
     this.scanned = false
-    if (end < length) {
-      try {
-        const following = this.decoder.decodeMultiple(this.buffer.subarray(end, length))
-        for (const value of following) values.push(value)
-      } catch (error) {
-        error.lastPosition += end
-        error.values = values.concat(error.values || [])
-        throw error
-      }
-    }
     this.buffer = null
     return values
   }
@@ -186,6 +178,8 @@ export class ChunkDecoder {
   fail (error) {
     this.buffer = null
     this.scanner = null
+    this.scanned = false
+    this.resetScanner = false
     return error
   }
 }
