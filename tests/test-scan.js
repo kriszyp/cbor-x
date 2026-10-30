@@ -392,6 +392,33 @@ suite('resumable structure scan', function () {
     }
   })
 
+  test('a caught nested source-copy error preserves the outer fragment guard', () => {
+    const single = read => {
+      const value = read()
+      const slice = Buffer.prototype.slice
+      Buffer.prototype.slice = () => { throw new Error('injected copy failure') }
+      try {
+        assert.throws(() => new Decoder().decode(Buffer.from([1])), 'injected copy failure')
+      } finally {
+        Buffer.prototype.slice = slice
+      }
+      return value
+    }
+    const multi = read => [read(), read()]
+    single.handlesRead = multi.handlesRead = true
+    addExtension({ tag: 41005, decode: single })
+    addExtension({ tag: 41006, decode: multi })
+    try {
+      const bytes = Buffer.from([0x82, 0xd9, 0xa0, 0x2d, 1, 0xd9, 0xa0, 0x2e, 2, 3])
+      assert.deepStrictEqual(new Decoder().decode(bytes), [1, [2, 3]])
+      assert.throws(() => [...decodeIter([bytes.subarray(0, 1), bytes.subarray(1)])],
+        'Tag 41006: fragmented decoding cannot frame multi-item handlesRead extensions')
+    } finally {
+      addExtension({ tag: 41005 })
+      addExtension({ tag: 41006 })
+    }
+  })
+
   test('single-item handlesRead and nested whole-buffer decoding remain supported', () => {
     const multi = read => [read(), read()]
     multi.handlesRead = true

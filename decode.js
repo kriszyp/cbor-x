@@ -1301,9 +1301,6 @@ function saveState(callback) {
 	let savedFragmentEnd = fragmentEnd
 	let savedFragmentReader = fragmentReadString
 	let savedReadFixedString = readFixedString
-	fragmentEnd = 0
-	if (fragmentReadString) readFixedString = fragmentReadString
-	fragmentReadString = null
 	let savedSrcEnd = srcEnd
 	let savedPosition = position
 	let savedStringPosition = stringPosition
@@ -1321,6 +1318,9 @@ function saveState(callback) {
 	let savedSequentialMode = sequentialMode
 	let savedRestoreMapsAsObject = restoreMapsAsObject
 	let savedArrayAllocationBudget = arrayAllocationBudget
+	fragmentEnd = 0
+	if (fragmentReadString) readFixedString = fragmentReadString
+	fragmentReadString = null
 	restoreMapsAsObject = false
 	try {
 		return callback()
