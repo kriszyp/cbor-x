@@ -31,6 +31,8 @@ export class StructureScanner {
     frame.stage = 0
     frame.id = undefined
     frame.restoreMap = false
+    frame.legacy = false
+    frame.definition = undefined
     frame.limitMajor = 0
     frame.count = 0
     this.depth++
@@ -130,13 +132,27 @@ export class StructureScanner {
         continue
       }
       if (frame.kind === 'definition' && frame.stage === 0) {
-        if (!this.header(source, end, true)) return false
-        frame.remaining = Math.max(2, this.argument)
+        const start = this.position
+        if (!this.header(source, end, !frame.legacy)) return false
+        if (frame.legacy && this.major !== 4) {
+          this.position = start
+          this.headers--
+          frame.kind = 'items'
+          frame.remaining = 1
+          continue
+        }
+        frame.remaining = frame.legacy ? (this.info === 31 ? -1 : this.argument) : Math.max(2, this.argument)
+        if (frame.legacy) {
+          if (frame.remaining >= 0) _stream.checkContainer(4, frame.remaining)
+          else frame.limitMajor = 4
+          frame.index = 0
+        }
         frame.total = frame.remaining
         frame.stage = 1
         continue
       }
       if (frame.remaining === 0) {
+        if (frame.definition) this.records.set(frame.id - 0xe000, frame.definition)
         if (frame.restoreMap && this.restoreMap) {
           this.mapsAsObjects = true
           this.restoreMap = false
@@ -147,13 +163,16 @@ export class StructureScanner {
       if (!this.header(source, end)) return false
       let { major, argument, info } = this
       if (frame.kind === 'definition') {
-        const index = frame.total - frame.remaining
+        const index = frame.legacy ? frame.index++ : frame.total - frame.remaining
         if (index === 0 && major === 0) frame.id = argument
         if ((frame.multiple ? index >= 1 && index < frame.total - 1 : index === 1) && major === 4 && info !== 31 && frame.id !== undefined) {
-          this.records.set(frame.id - 0xe000 + (frame.multiple ? index - 1 : 0), { length: argument, slowReads: 0, compiled: new Set() })
+          const definition = { length: argument, slowReads: 0, compiled: new Set() }
+          if (frame.legacy) frame.definition = definition
+          else this.records.set(frame.id - 0xe000 + (frame.multiple ? index - 1 : 0), definition)
         }
       }
       if (major === 7 && info === 31 && (frame.remaining === -1 || frame.remaining === -2)) {
+        if (frame.definition) this.records.set(frame.id - 0xe000, frame.definition)
         this.depth--
         continue
       }
@@ -213,7 +232,9 @@ export class StructureScanner {
             this.mapsAsObjects = false
             this.restoreMap = true
           } else if (argument === 105 && _stream.isBuiltinTag(argument)) {
-            this.push('definition').multiple = false
+            const definition = this.push('definition')
+            definition.multiple = false
+            definition.legacy = true
           } else {
             this.push('items', 1)
           }
