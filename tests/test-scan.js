@@ -288,11 +288,11 @@ suite('resumable structure scan', function () {
     try {
       const cases = [
         [[0x81, 0x84], {}, 'Array length exceeds 3'],
-        [[0x81, 0xa3], {}, 'Property count exceeds 2'],
+        [[0x81, 0xa3], { mapsAsObjects: true }, 'Property count exceeds 2'],
         [[0x81, 0xa4], { mapsAsObjects: false }, 'Map size exceeds 3'],
         [[0x81, 0xd9, 1, 3, 0xa4], {}, 'Map size exceeds 3'],
         [[0x81, 0x9f, 1, 2, 3, 4], {}, 'Array length exceeds 3'],
-        [[0x81, 0xbf, 1, 1, 2, 2, 3, 3], {}, 'Property count exceeds 2']
+        [[0x81, 0xbf, 1, 1, 2, 2, 3, 3], { mapsAsObjects: true }, 'Property count exceeds 2']
       ]
       for (const [bytes, options, message] of cases) {
         const result = await streamDecode(chunks(Buffer.from(bytes), 1), options)
@@ -303,7 +303,16 @@ suite('resumable structure scan', function () {
       const allowed = Buffer.from([0x81, 0xd9, 1, 3, 0xa3, 1, 1, 2, 2, 3, 3])
       assert.deepStrictEqual([...decodeIter(chunks(allowed, 1))], [new Decoder().decode(allowed)])
       const restored = Buffer.from([0x82, 0xd9, 1, 3, 0, 0xa3, 1, 1, 2, 2, 3, 3])
-      assert.throws(() => [...decodeIter(chunks(restored, 1))], 'Property count exceeds 2')
+      assert.throws(() => [...decodeIter(chunks(restored, 1), { mapsAsObjects: true })], 'Property count exceeds 2')
+      for (const bytes of [Buffer.from([0x81, 0xa3, 1, 1, 2, 2, 3, 3]), restored]) {
+        for (const options of [{}, { mapsAsObjects: false }]) {
+          const expected = [new Decoder(options).decode(bytes)]
+          assert.deepStrictEqual([...decodeIter(chunks(bytes, 1), options)], expected)
+          const result = await streamDecode(chunks(bytes, 1), options)
+          assert.isUndefined(result.error)
+          assert.deepStrictEqual(result.values, expected)
+        }
+      }
     } finally {
       setSizeLimits({ maxArraySize: 112810000, maxMapSize: 16810000, maxObjectSize: 16710000 })
     }
@@ -343,10 +352,16 @@ suite('resumable structure scan', function () {
   })
 
   test('an internal chunk decoder can be reused after a scanned fatal error', () => {
-    const decoder = new Decoder()
+    const decoder = new Decoder({ mapsAsObjects: true })
     const chunk = new ChunkDecoder(decoder)
     try { decoder.decodeMultiple(Buffer.from([0xa1])) } catch (error) { chunk.keepIncomplete(error, Buffer.from([0xa1])) }
-    try { chunk.decodeAfterIncomplete(Buffer.from([0x80, 1])) } catch (error) { assert.isOk(chunk.keepIncomplete(error)) }
+    let failure
+    assert.throws(() => {
+      try { chunk.decodeAfterIncomplete(Buffer.from([0x80, 1])) } catch (error) { failure = error; throw error }
+    }, 'Invalid property name type object')
+    assert.strictEqual(chunk.keepIncomplete(failure), failure)
+    assert.isNull(chunk.scanner)
+    assert.isFalse(chunk.scanned)
     try { decoder.decodeMultiple(Buffer.from([0x81])) } catch (error) { assert.isUndefined(chunk.keepIncomplete(error, Buffer.from([0x81]))) }
     assert.deepStrictEqual(chunk.decodeAfterIncomplete(Buffer.from([1])), [[1]])
   })

@@ -16,7 +16,7 @@ export class StructureScanner {
     this.neededLength = 0
     this.postBundlePosition = 0
     this.headers = 0
-    this.mapsAsObjects = this.decoder.mapsAsObjects !== false
+    this.mapsAsObjects = !!this.decoder.mapsAsObjects
     this.restoreMap = false
     this.records.clear()
     this.readers.clear()
