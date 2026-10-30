@@ -352,6 +352,13 @@ suite('resumable structure scan', function () {
   })
 
   test('extension registration preserves optional decoders and mutable handlesRead flags', () => {
+    class EncodeOnly {}
+    assert.doesNotThrow(() => addExtension({
+      Class: EncodeOnly,
+      tag: 41003,
+      encode (value, encode) { encode('encode only') }
+    }))
+    assert.deepStrictEqual(new Decoder().decode(new Encoder().encode(new EncodeOnly())), new Tag('encode only', 41003))
     assert.doesNotThrow(() => addExtension({ tag: 41003 }))
     const decode = input => typeof input === 'function' ? [input(), input()] : input
     addExtension({ tag: 41004, decode })
