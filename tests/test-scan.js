@@ -2,7 +2,7 @@ import { assert } from 'chai'
 import { performance } from 'node:perf_hooks'
 import { Decoder, Encoder, DecoderStream, decodeIter, addExtension, Tag, setSizeLimits } from '../node-index.js'
 import { StructureScanner } from '../scan.js'
-import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 import { ChunkDecoder } from '../iterators.js'
 
 function chunks (bytes, size) {
@@ -336,11 +336,19 @@ suite('resumable structure scan', function () {
     }
   })
 
-  test('no-eval builds use the same record counts for whole and fragmented values', () => {
-    const noEval = createRequire(import.meta.url)('../dist/index-no-eval.cjs')
-    const bytes = Buffer.from([0x83, ...[1, 2, 3].flatMap(n => [0xd9, 0xe0, 0, 0x82, n, n])])
-    const whole = new noEval.Decoder({ structures: [['a']] }).decode(bytes)
-    assert.deepStrictEqual([...noEval.decodeIter(chunks(bytes, 1), { structures: [['a']] })], [whole])
+  test('CSP uses the same record counts for whole and fragmented values', () => {
+    execFileSync(process.execPath, ['--disallow-code-generation-from-strings', '--input-type=module', '--eval', `
+      import assert from 'node:assert/strict'
+      import { Decoder, decodeIter } from ${JSON.stringify(new URL('../node-index.js', import.meta.url).href)}
+      const bytes = Buffer.from([0x83, ...[1, 2, 3].flatMap(n => [0xd9, 0xe0, 0, 0x82, n, n])])
+      const expected = new Decoder({ structures: [['a']] }).decode(bytes)
+      let calls = 0
+      const decodeMultiple = Decoder.prototype.decodeMultiple
+      Decoder.prototype.decodeMultiple = function (source) { calls++; return decodeMultiple.call(this, source) }
+      const parts = Array.from(bytes, (_, i) => bytes.subarray(i, i + 1))
+      assert.deepStrictEqual([...decodeIter(parts, { structures: [['a']] })], [expected])
+      assert.strictEqual(calls, 2)
+    `])
   })
 
   test('fatal errors after a framed value preserve preceding values', async () => {
