@@ -1310,6 +1310,7 @@ function saveState(callback) {
 	let savedStrings = strings
 	let savedReferenceMap = referenceMap
 	let savedBundledStrings = bundledStrings
+	let savedPackedValues = packedValues
 
 	// TODO: We may need to revisit this if we do more external calls to user code (since it could be slow)
 	let savedSrc = new Uint8Array(src.slice(0, srcEnd)) // we copy the data in case it changes while external data is processed
@@ -1337,6 +1338,7 @@ function saveState(callback) {
 		strings = savedStrings
 		referenceMap = savedReferenceMap
 		bundledStrings = savedBundledStrings
+		packedValues = savedPackedValues
 		src = savedSrc
 		sequentialMode = savedSequentialMode
 		currentStructures = savedStructures
