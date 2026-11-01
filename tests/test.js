@@ -726,7 +726,8 @@ suite('CBOR basic tests', function(){
 		assert.equal(Buffer.from(encode(bytes.subarray(1, 4))).toString('hex'), 'd84043010203')
 		assert.equal(Buffer.from(encode(Buffer.from(bytes.subarray(1, 4)))).toString('hex'), '43010203')
 		assert.equal(Buffer.from(new Encoder({ tagUint8Array: false }).encode(bytes.subarray(1, 4))).toString('hex'), '43010203')
-		assert.equal(Buffer.from(encode(new Uint16Array(bytes.buffer, 2, 2))).toString('hex'), 'd8454402030405')
+		let uint16Tag = new Uint8Array(new Uint16Array([1]).buffer)[0] == 1 ? '45' : '41'
+		assert.equal(Buffer.from(encode(new Uint16Array(bytes.buffer, 2, 2))).toString('hex'), 'd8' + uint16Tag + '4402030405')
 		assert.equal(Buffer.from(encode(new Uint8ClampedArray(bytes.buffer, 2, 2))).toString('hex'), 'd844420203')
 	})
 

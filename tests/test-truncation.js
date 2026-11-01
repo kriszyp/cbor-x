@@ -702,7 +702,6 @@ suite('end beyond the source', function () {
 		const offsetView = Buffer.from(shared.buffer, 4, 2)
 		offsetView[0] = 0x81; offsetView[1] = 0x6e // [text(14)] at a nonzero offset
 		assert.throws(() => new Decoder().decode(offsetView, 16), /Unexpected end/)
-		// an oversized end on a complete value is capped, not rejected
 		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64]), 10), 100)
 		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64, 0x01]), 2), 100)
 	})
