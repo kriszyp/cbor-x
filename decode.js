@@ -13,7 +13,6 @@ const RECORD_INLINE_ID = 0xdfff // temporary first-come first-serve tag // propo
 const BUNDLED_STRINGS_ID = 0xdff9
 const PACKED_TABLE_TAG_ID = 51
 const PACKED_REFERENCE_TAG_ID = 6
-const STOP_CODE = {}
 let maxArraySize = 112810000 // This is the maximum array size in V8. We would potentially detect and set it higher
 // for JSC, but this is pretty large and should be sufficient for most use cases
 let maxMapSize = 16810000 // JavaScript has a fixed maximum map size of about 16710000, but JS itself enforces this,
@@ -273,6 +272,13 @@ export function checkedRead() {
 	}
 }
 
+function readBreak() {
+	if (position < srcEnd && src[position] === 0xff) {
+		position++
+		return true
+	}
+	return false
+}
 // neededEnd, from a length check, is a position that the source must extend to before the item can decode. It is a
 // lower bound for any completion of the source: every byte read before the check was within the source, so a longer
 // source reaches the same check with the same length. Streams wait for it instead of decoding on every chunk.
@@ -346,10 +352,10 @@ export function read() {
 						throw new Error('Indefinite length not supported for byte or text strings')
 					case 4: // array
 						let array = []
-						let value, i = 0
-						while ((value = read()) != STOP_CODE) {
+						let i = 0
+						while (!readBreak()) {
 							if (i >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
-							array[i++] = value
+							array[i++] = read()
 						}
 						return majorType == 4 ? array : majorType == 3 ? array.join('') : Buffer.concat(array)
 					case 5: // map
@@ -358,13 +364,15 @@ export function read() {
 							let object = {}
 							let i = 0;
 							if (currentDecoder.keyMap) {
-								while((key = read()) != STOP_CODE) {
+								while (!readBreak()) {
+									key = read()
 									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(currentDecoder.decodeKey(key))] = read()
 								}
 							}
 							else {
-								while ((key = read()) != STOP_CODE) {
+								while (!readBreak()) {
+									key = read()
 									if (i++ >= objectSizeLimit) throw new Error(`Property count exceeds ${objectSizeLimit}`)
 									object[safeKey(key)] = read()
 								}
@@ -378,7 +386,8 @@ export function read() {
 							let map = new Map()
 							if (currentDecoder.keyMap) {
 								let i = 0;
-								while((key = read()) != STOP_CODE) {
+								while (!readBreak()) {
+									key = read()
 									if (i++ >= maxMapSize) {
 										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
@@ -387,7 +396,8 @@ export function read() {
 							}
 							else {
 								let i = 0;
-								while ((key = read()) != STOP_CODE) {
+								while (!readBreak()) {
+									key = read()
 									if (i++ >= maxMapSize) {
 										throw new Error(`Map size exceeds ${maxMapSize}`);
 									}
@@ -397,7 +407,8 @@ export function read() {
 							return map
 						}
 					case 7:
-						return STOP_CODE
+						// readBreak consumes every break that ends an indefinite-length item
+						throw new Error('Unexpected break stop code outside of an indefinite-length item')
 					default:
 						throw new Error('Invalid major type for indefinite length ' + majorType)
 				}

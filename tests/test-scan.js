@@ -97,11 +97,14 @@ suite('resumable structure scan', function () {
       assert.strictEqual(result.values[0].length, count)
       assert.strictEqual(iterDecode(chunks(array, 257)).calls, 2)
     }
-    const map = Buffer.from([0xbf, 1, 0xff, 2, 0x9f, 3, 0xff, 0xff])
+    const map = Buffer.from([0xbf, 1, 0xf6, 2, 0x9f, 3, 0xff, 0xff])
     const result = await streamDecode(chunks(map, 1), { mapsAsObjects: false })
     assert.isUndefined(result.error)
     assert.deepStrictEqual(result.values, [new Decoder({ mapsAsObjects: false }).decode(map)])
     assert.strictEqual(result.calls, 2)
+    // a break in a value position does not end the map; it is not well-formed
+    const strayBreak = await streamDecode(chunks(Buffer.from([0xbf, 1, 0xff, 0xff]), 1), { mapsAsObjects: false })
+    assert.match(strayBreak.error.message, /Unexpected break/)
   })
 
   for (const options of [{ useRecords: true }, { pack: true }, { bundleStrings: true },
