@@ -722,7 +722,6 @@ suite('CBOR basic tests', function(){
 			'581e' + Buffer.from(bytes.subarray(5, 35)).toString('hex'))
 		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 0, 0))).toString('hex'), '40')
 		assert.deepEqual(decode(encode({ v: new DataView(bytes.buffer, 1, 2) })), { v: Buffer.from([1, 2]) })
-		// other binary types are unchanged
 		assert.equal(Buffer.from(encode(bytes.buffer.slice(1, 4))).toString('hex'), '43010203')
 		assert.equal(Buffer.from(encode(bytes.subarray(1, 4))).toString('hex'), 'd84043010203')
 		assert.equal(Buffer.from(encode(Buffer.from(bytes.subarray(1, 4)))).toString('hex'), '43010203')

@@ -204,7 +204,7 @@ export class Decoder {
 				return values
 			}
 		} catch(error) {
-			if (error && typeof error == 'object') {
+			if (error && (typeof error == 'object' || typeof error == 'function')) {
 				error.lastPosition = lastPosition
 				error.values = values
 			}
@@ -1350,7 +1350,7 @@ function saveState(callback) {
 	} catch (error) {
 		// the callback decodes its own source (a shared structures blob, or an extension's embedded data), so a
 		// truncation there cannot be completed by more of the outer input; checkedRead() clears the flag
-		if (error && typeof error == 'object')
+		if (error && (typeof error == 'object' || typeof error == 'function'))
 			nestedDecodeErrors.add(error)
 		throw error
 	} finally {

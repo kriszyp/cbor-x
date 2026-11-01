@@ -554,7 +554,7 @@ suite('complete but invalid input is not incomplete', function () {
 
 	test('an extension throwing a falsy or non-Error value fails a stream', async () => {
 		let tag = 40006
-		for (const thrown of [null, undefined, 0, '', 'invalid']) {
+		for (const thrown of [null, undefined, false, 0, '', 'invalid']) {
 			const t = tag++
 			addExtension({ tag: t, decode: () => { throw thrown } })
 			const bytes = Buffer.from([0x01, 0xd9, t >> 8, t & 0xff, 0x01])
@@ -569,18 +569,44 @@ suite('complete but invalid input is not incomplete', function () {
 		}
 	})
 
+	test('an extension throwing a function gets the values decoded before it', async () => {
+		const failure = function () {}
+		failure.values = 1
+		addExtension({ tag: 40012, decode: () => { throw failure } })
+		const bytes = Buffer.from([0x01, 0xd9, 0x9c, 0x4c, 0x01])
+		let thrown
+		try {
+			new Decoder().decodeMultiple(bytes)
+		} catch (error) {
+			thrown = error
+		}
+		assert.strictEqual(thrown, failure)
+		assert.deepStrictEqual(failure.values, [1])
+		const stream = new DecoderStream()
+		const received = []
+		stream.on('data', value => received.push(value))
+		const error = await new Promise(resolve => {
+			stream.on('error', resolve)
+			stream.write(bytes)
+		})
+		assert.strictEqual(error, failure)
+		assert.deepStrictEqual(received, [1])
+	})
+
 	test('a truncated shared structures blob', async () => {
 		let blob
 		const encoder = new Encoder({ useRecords: true, getStructures() {}, saveStructures(shared) { blob = encode(shared) } })
 		const encoded = encoder.encode({ a: 1 })
 		const truncated = blob.subarray(0, blob.length - 1)
 		const options = { useRecords: true, getStructures: () => decode(truncated) }
+		let decodeError
 		try {
 			new Decoder(options).decode(encoded)
-			assert.fail('should not decode')
 		} catch (error) {
-			assert.isNotOk(error.incomplete, error.message)
+			decodeError = error
 		}
+		assert.instanceOf(decodeError, Error, 'should not decode')
+		assert.isNotOk(decodeError.incomplete, decodeError.message)
 		const stream = new DecoderStream(options)
 		stream.on('data', () => {})
 		const error = await new Promise(resolve => {
@@ -673,5 +699,11 @@ suite('end beyond the source', function () {
 				assert.isTrue(error.incomplete, error.message)
 			}
 		}
+		const offsetView = Buffer.from(shared.buffer, 4, 2)
+		offsetView[0] = 0x81; offsetView[1] = 0x6e // [text(14)] at a nonzero offset
+		assert.throws(() => new Decoder().decode(offsetView, 16), /Unexpected end/)
+		// an oversized end on a complete value is capped, not rejected
+		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64]), 10), 100)
+		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64, 0x01]), 2), 100)
 	})
 })
