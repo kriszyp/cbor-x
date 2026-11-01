@@ -1,0 +1,483 @@
+import { assert } from 'chai'
+import { performance } from 'node:perf_hooks'
+import { Decoder, Encoder, DecoderStream, decodeIter, addExtension, Tag, setSizeLimits, isNativeAccelerationEnabled } from '../node-index.js'
+import { StructureScanner } from '../scan.js'
+import { execFileSync } from 'node:child_process'
+import { ChunkDecoder } from '../iterators.js'
+
+function chunks (bytes, size) {
+  const parts = []
+  for (let i = 0; i < bytes.length; i += size) parts.push(bytes.subarray(i, i + size))
+  return parts
+}
+
+async function streamDecode (parts, options) {
+  const stream = new DecoderStream(options)
+  const values = []
+  const ends = []
+  let fed = 0
+  let calls = 0
+  const decodeMultiple = stream.decoder.decodeMultiple
+  stream.decoder.decodeMultiple = function (source) {
+    calls++
+    return decodeMultiple.call(this, source)
+  }
+  stream.on('data', value => { values.push(value); ends.push(fed) })
+  const done = new Promise(resolve => {
+    stream.once('error', error => resolve(error))
+    stream.once('finish', () => resolve())
+  })
+  for (const part of parts) {
+    if (stream.errored) break
+    fed += part.length
+    stream.write(part)
+  }
+  stream.end()
+  return { error: await done, values, calls, ends, scanner: stream.chunkDecoder.scanner }
+}
+
+function iterDecode (parts, options) {
+  let calls = 0
+  const decodeMultiple = Decoder.prototype.decodeMultiple
+  Decoder.prototype.decodeMultiple = function (source) {
+    calls++
+    return decodeMultiple.call(this, source)
+  }
+  try {
+    return { values: [...decodeIter(parts, options)], calls }
+  } finally {
+    Decoder.prototype.decodeMultiple = decodeMultiple
+  }
+}
+
+suite('resumable structure scan', function () {
+  this.timeout(20000)
+
+  test('4 MiB of small strings uses two decodes in streams and iterators', async () => {
+    const count = Math.floor(4 * 1048576 / 21)
+    const bytes = Buffer.alloc(5 + count * 21, 120)
+    bytes[0] = 0x9a
+    bytes.writeUInt32BE(count, 1)
+    for (let i = 5; i < bytes.length; i += 21) bytes[i] = 0x74
+    const parts = chunks(bytes, 16384)
+    const start = performance.now()
+    const iter = iterDecode(parts)
+    const stream = await streamDecode(parts)
+    assert.isUndefined(stream.error)
+    assert.strictEqual(iter.calls, 2)
+    assert.strictEqual(stream.calls, 2)
+    assert.strictEqual(iter.values[0].length, count)
+    assert.isTrue(iter.values[0].every(value => value === 'x'.repeat(20)))
+    assert.deepStrictEqual(stream.values, iter.values)
+    assert.strictEqual(stream.scanner.headers, count + 1)
+    assert.isBelow(performance.now() - start, 5000)
+  })
+
+  test('deep fanout-two trees scan every header once', async () => {
+    let tree = 'x'.repeat(20)
+    for (let i = 0; i < 16; i++) tree = [tree, tree]
+    const bytes = new Encoder({ useRecords: false }).encode(tree)
+    const parts = chunks(bytes, 1024)
+    const result = await streamDecode(parts)
+    assert.isUndefined(result.error)
+    assert.strictEqual(result.calls, 2)
+    assert.strictEqual(result.scanner.headers, 2 ** 17 - 1)
+    assert.deepStrictEqual(result.values, [tree])
+    assert.strictEqual(iterDecode(parts).calls, 2)
+  })
+
+  test('indefinite arrays and maps keep their position and map parity', async () => {
+    for (const count of [4000, 16000]) {
+      const item = Buffer.from([0x74, ...Buffer.from('x'.repeat(20))])
+      const array = Buffer.concat([Buffer.from([0x9f]), ...new Array(count).fill(item), Buffer.from([0xff])])
+      const result = await streamDecode(chunks(array, 257))
+      assert.isUndefined(result.error)
+      assert.strictEqual(result.calls, 2)
+      assert.strictEqual(result.scanner.headers, count + 2)
+      assert.strictEqual(result.values[0].length, count)
+      assert.strictEqual(iterDecode(chunks(array, 257)).calls, 2)
+    }
+    const map = Buffer.from([0xbf, 1, 0xff, 2, 0x9f, 3, 0xff, 0xff])
+    const result = await streamDecode(chunks(map, 1), { mapsAsObjects: false })
+    assert.isUndefined(result.error)
+    assert.deepStrictEqual(result.values, [new Decoder({ mapsAsObjects: false }).decode(map)])
+    assert.strictEqual(result.calls, 2)
+  })
+
+  for (const options of [{ useRecords: true }, { pack: true }, { bundleStrings: true },
+    { keyMap: { name: 1, id: 2 } }, { useStringRefs: true }, { structuredClone: true }]) {
+    test('all split offsets and bytewise delivery: ' + JSON.stringify(options), async () => {
+      const items = [[{ name: 'hello hello', id: 1 }, { name: 'hello hello', id: 2 }],
+        ['another string', 'another string'], 12345]
+      const encoder = new Encoder(options)
+      const encodings = items.map(value => encoder.encode(value))
+      const bytes = Buffer.concat(encodings)
+      const expected = [...decodeIter([bytes], options)]
+      for (let offset = 1; offset < bytes.length; offset++) {
+        const parts = [bytes.subarray(0, offset), bytes.subarray(offset)]
+        assert.deepStrictEqual([...decodeIter(parts, options)], expected, 'offset ' + offset)
+        const result = await streamDecode(parts, options)
+        assert.isUndefined(result.error, 'offset ' + offset)
+        assert.deepStrictEqual(result.values, expected)
+      }
+      let fed = 0
+      const ends = []
+      const actual = []
+      for await (const value of decodeIter((async function * () {
+        for (; fed < bytes.length; fed++) yield bytes.subarray(fed, fed + 1)
+      })(), options)) {
+        ends.push(fed + 1)
+        actual.push(value)
+      }
+      let end = 0
+      assert.deepStrictEqual(ends, encodings.map(bytes => end += bytes.length))
+      assert.deepStrictEqual(actual, expected)
+      const streamed = await streamDecode(chunks(bytes, 1), options)
+      assert.isUndefined(streamed.error)
+      assert.deepStrictEqual(streamed.ends, ends)
+      assert.deepStrictEqual(streamed.values, expected)
+      assert.isAtMost(streamed.calls, 2 * items.length)
+    })
+  }
+
+  test('chained bundles and a trailing value', async () => {
+    const value = new Array(12000).fill('bundled α text of twenty bytes')
+    const encoder = new Encoder({ bundleStrings: true })
+    const bytes = Buffer.concat([encoder.encode(value), encoder.encode(42)])
+    const result = await streamDecode(chunks(bytes, 127))
+    assert.isUndefined(result.error)
+    assert.strictEqual(result.calls, 2)
+    assert.deepStrictEqual(result.values, [value, 42])
+    assert.deepStrictEqual([...decodeIter(chunks(bytes, 127))], [value, 42])
+  })
+
+  test('record definitions and record readers preserve their wire counts', async () => {
+    const cases = [
+      [0xd9, 0xdf, 0xfe, 0x82, 0x19, 0xe0, 0, 0x81, 0xd9, 0xe0, 0, 0x61, 0x61],
+      [0x82, 0xd9, 0xdf, 0xff, 0x83, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 1, 0xd9, 0xe0, 0, 0x41, 2],
+      [0x82, 0xd8, 105, 0x83, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 1, 0xd9, 0xe0, 0, 0x41, 2],
+      [0x82, 0xd8, 105, 0x9f, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 1, 0xff, 0xd9, 0xe0, 0, 0x41, 2],
+      [0x82, 0xd8, 105, 0x9b, 0, 0, 0, 0, 0, 0, 0, 3, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 1, 0xd9, 0xe0, 0, 0x41, 2],
+      [0xd9, 0xdf, 0xfe, 0x84, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 0x81, 0x61, 0x62,
+        0x82, 0xd9, 0xe0, 0, 0x81, 1, 0xd9, 0xe0, 1, 0x41, 2]
+    ]
+    for (const bytes of cases) {
+      const buffer = Buffer.from(bytes)
+      const expected = new Decoder().decode(buffer)
+      const result = await streamDecode(chunks(buffer, 1))
+      assert.isUndefined(result.error)
+      assert.deepStrictEqual(result.values, [expected])
+      assert.deepStrictEqual([...decodeIter(chunks(buffer, 1))], [expected])
+      assert.strictEqual(result.calls, 2)
+    }
+    const compiled = Buffer.from([0x85, 0xd9, 0xdf, 0xff, 0x83, 0x19, 0xe0, 0, 0x81, 0x61, 0x61, 1,
+      ...[2, 3, 4].flatMap(n => [0xd9, 0xe0, 0, 0x81, n]), 0xd9, 0xe0, 0, 0x82, 5])
+    assert.deepStrictEqual([...decodeIter(chunks(compiled, 1))], [new Decoder().decode(compiled)])
+    const structures = []
+    structures[0x1ff9] = ['a']
+    const bytes = Buffer.from([0xd9, 0xdf, 0xf9, 0x81, 0x65, ...Buffer.from('hello')])
+    assert.deepStrictEqual([...decodeIter(chunks(bytes, 1), { structures })], [{ a: 'hello' }])
+  })
+
+  test('native string read-ahead cannot cross a scanned value into a truncated next value', async function () {
+    if (!isNativeAccelerationEnabled) this.skip()
+    const message = new Encoder({ useRecords: false }).encode({ id: 123, name: 'x'.repeat(700), data: [1, 2, 3] })
+    const bytes = Buffer.concat(new Array(1000).fill(message))
+    for (const size of [127, 1024, 65536]) {
+      const parts = chunks(bytes, size)
+      const expected = [...decodeIter([bytes])]
+      assert.deepStrictEqual([...decodeIter(parts)], expected)
+      const streamed = await streamDecode(parts)
+      assert.isUndefined(streamed.error)
+      assert.deepStrictEqual(streamed.values, expected)
+    }
+  })
+
+  test('completed deep values release excess frame storage', async () => {
+    const bytes = Buffer.concat([Buffer.alloc(1000, 0x81), Buffer.from([1])])
+    const result = await streamDecode(chunks(bytes, 7))
+    assert.isUndefined(result.error)
+    assert.strictEqual(result.calls, 2)
+    assert.isAtMost(result.scanner.frames.length, 256)
+    let value = result.values[0]
+    for (let i = 0; i < 1000; i++) value = value[0]
+    assert.strictEqual(value, 1)
+  })
+
+  test('seeded nested values match whole decoding at varying split boundaries', async () => {
+    let seed = 0x12345678
+    const random = n => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n }
+    const value = depth => {
+      if (!depth) return [random(100000), 'α string '.repeat(random(8)), !!random(2), new Uint8Array([random(256)])][random(4)]
+      return random(2) ? Array.from({ length: random(4) }, () => value(depth - 1))
+        : { name: value(depth - 1), id: value(depth - 1) }
+    }
+    for (const options of [{ useRecords: true }, { pack: true }, { bundleStrings: true },
+      { keyMap: { name: 1, id: 2 } }, { useStringRefs: true }, { structuredClone: true }]) {
+      for (let i = 0; i < 24; i++) {
+        const bytes = new Encoder({ ...options }).encode(value(3))
+        const expected = [new Decoder({ ...options }).decode(bytes)]
+        const parts = chunks(bytes, 1 + random(Math.max(1, bytes.length - 1)))
+        assert.deepStrictEqual([...decodeIter(parts, { ...options })], expected)
+        const result = await streamDecode(parts, { ...options })
+        assert.isUndefined(result.error)
+        assert.deepStrictEqual(result.values, expected)
+        assert.isAtMost(result.calls, 2)
+      }
+    }
+  })
+
+  test('interleaved scanners keep their state separate', () => {
+    const first = new Encoder().encode(['first', [1, 2, 3]])
+    const second = new Encoder({ bundleStrings: true }).encode(['second string', 'third string'])
+    const a = new StructureScanner(new Decoder())
+    const b = new StructureScanner(new Decoder())
+    for (let end = 1; end < Math.max(first.length, second.length); end++) {
+      if (end < first.length) assert.isFalse(a.scan(first, end))
+      if (end < second.length) assert.isFalse(b.scan(second, end))
+    }
+    assert.isTrue(a.scan(first, first.length))
+    assert.isTrue(b.scan(second, second.length))
+  })
+
+  test('stringref tags retain the existing ordinary-tag behavior', () => {
+    const bytes = Buffer.from([0xd9, 1, 0, 0x82, 0x65, ...Buffer.from('hello'), 0xd8, 25, 0])
+    assert.deepStrictEqual([...decodeIter(chunks(bytes, 1))], [new Tag(['hello', new Tag(0, 25)], 256)])
+  })
+
+  test('header widths, malformed headers, and indefinite strings', async () => {
+    for (const bytes of [
+      [0x82, 0x1b, 0, 0, 0, 0, 0, 0, 0, 1, 0xfb, 0x3f, 0xf0, 0, 0, 0, 0, 0, 0],
+      [0x82, 0x9b, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0xf9, 0x3c, 0],
+      [0x82, 1, 0x7f], [0x82, 1, 0x5f], [0x82, 1, 0x1c], [0x82, 1, 0x1d], [0x82, 1, 0x1e],
+      [0x82, 0x5b, 0, 0, 0, 1, 0, 0, 0, 0]
+    ]) {
+      const buffer = Buffer.from(bytes)
+      let expected, error
+      try { expected = new Decoder().decode(buffer) } catch (failure) { error = failure }
+      const result = await streamDecode(chunks(buffer, 1))
+      if (error) {
+        assert.strictEqual(result.error?.message, error.message)
+        assert.isNotOk(result.error.incomplete)
+      } else {
+        assert.isUndefined(result.error)
+        assert.deepStrictEqual(result.values, [expected])
+      }
+    }
+  })
+
+  test('a deeply nested incomplete value bounds scanner memory and fails through the stream', async () => {
+    const result = await streamDecode(chunks(Buffer.alloc(20000, 0x81), 1024))
+    assert.instanceOf(result.error, RangeError)
+    assert.isNotOk(result.error.incomplete)
+  })
+
+  test('scanner exceptions reach the error event', async () => {
+    const scan = StructureScanner.prototype.scan
+    StructureScanner.prototype.scan = () => { throw new Error('scan allocation failure') }
+    try {
+      const result = await streamDecode([Buffer.from([0x82]), Buffer.from([1, 2])])
+      assert.strictEqual(result.error?.message, 'scan allocation failure')
+    } finally {
+      StructureScanner.prototype.scan = scan
+    }
+  })
+
+  test('an indefinite container still enforces the incomplete byte cap', async () => {
+    const parts = chunks(Buffer.from([0x9f, ...new Array(100).fill(1)]), 7)
+    const result = await streamDecode(parts, { maxIncompleteBufferSize: 50 })
+    assert.strictEqual(result.error?.message, 'Maximum incomplete buffer size exceeded')
+    assert.strictEqual(result.calls, 1)
+    assert.throws(() => [...decodeIter(parts, { maxIncompleteBufferSize: 50 })], 'Maximum incomplete buffer size exceeded')
+  })
+
+  test('custom multi-item handlesRead is rejected only for the fragmented value', async () => {
+    const decode = read => Array.from({ length: read() }, () => read())
+    decode.handlesRead = true
+    addExtension({ tag: 41000, decode })
+    const bytes = Buffer.from([0xd9, 0xa0, 0x28, 3, 1, 2, 3])
+    const message = 'Tag 41000: fragmented decoding cannot frame multi-item handlesRead extensions'
+    try {
+      assert.deepStrictEqual(new Decoder().decode(bytes), [1, 2, 3])
+      assert.deepStrictEqual([...decodeIter([bytes])], [[1, 2, 3]])
+      const parts = [bytes.subarray(0, 4), ...chunks(bytes.subarray(4), 1)]
+      assert.throws(() => [...decodeIter(parts)], message)
+      assert.strictEqual((await streamDecode(parts)).error?.message, message)
+      assert.deepStrictEqual(new Decoder().decode(bytes), [1, 2, 3])
+      const result = await streamDecode([Buffer.from([0x81]), Buffer.concat([Buffer.from([1]), bytes])])
+      assert.isUndefined(result.error)
+      assert.deepStrictEqual(result.values, [[1], [1, 2, 3]])
+      const catching = read => {
+        const first = read()
+        try { read() } catch (error) {}
+        return first
+      }
+      catching.handlesRead = true
+      addExtension({ tag: 41000, decode: catching })
+      assert.throws(() => [...decodeIter([bytes.subarray(0, 2), bytes.subarray(2)])], message)
+    } finally {
+      addExtension({ tag: 41000 })
+    }
+  })
+
+  test('scanner enforces array, map, and object limits before buffering bodies', async () => {
+    setSizeLimits({ maxArraySize: 3, maxMapSize: 3, maxObjectSize: 2 })
+    try {
+      const cases = [
+        [[0x81, 0x84], {}, 'Array length exceeds 3'],
+        [[0x81, 0xa3], { mapsAsObjects: true }, 'Property count exceeds 2'],
+        [[0x81, 0xa4], { mapsAsObjects: false }, 'Map size exceeds 3'],
+        [[0x81, 0xd9, 1, 3, 0xa4], {}, 'Map size exceeds 3'],
+        [[0x81, 0x9f, 1, 2, 3, 4], {}, 'Array length exceeds 3'],
+        [[0x81, 0xbf, 1, 1, 2, 2, 3, 3], { mapsAsObjects: true }, 'Property count exceeds 2']
+      ]
+      for (const [bytes, options, message] of cases) {
+        const result = await streamDecode(chunks(Buffer.from(bytes), 1), options)
+        assert.strictEqual(result.error?.message, message)
+        assert.isNotOk(result.error.incomplete)
+        assert.strictEqual(result.calls, 1)
+      }
+      const allowed = Buffer.from([0x81, 0xd9, 1, 3, 0xa3, 1, 1, 2, 2, 3, 3])
+      assert.deepStrictEqual([...decodeIter(chunks(allowed, 1))], [new Decoder().decode(allowed)])
+      const restored = Buffer.from([0x82, 0xd9, 1, 3, 0, 0xa3, 1, 1, 2, 2, 3, 3])
+      assert.throws(() => [...decodeIter(chunks(restored, 1), { mapsAsObjects: true })], 'Property count exceeds 2')
+      for (const bytes of [Buffer.from([0x81, 0xa3, 1, 1, 2, 2, 3, 3]), restored]) {
+        for (const options of [{}, { mapsAsObjects: false }]) {
+          const expected = [new Decoder(options).decode(bytes)]
+          assert.deepStrictEqual([...decodeIter(chunks(bytes, 1), options)], expected)
+          const result = await streamDecode(chunks(bytes, 1), options)
+          assert.isUndefined(result.error)
+          assert.deepStrictEqual(result.values, expected)
+        }
+      }
+    } finally {
+      setSizeLimits({ maxArraySize: 112810000, maxMapSize: 16810000, maxObjectSize: 16710000 })
+    }
+  })
+
+  test('completion retains sequential records, packed values, and references for following values', async () => {
+    const encoder = new Encoder({ sequential: true })
+    const records = Buffer.concat([encoder.encode({ a: 'hello' }), encoder.encode({ a: 'world' })])
+    const packed = Buffer.from([0xd8, 51, 0x84, 0x81, 0x61, 0x61, 0x80, 0x80, 0xe0, 0xe0])
+    const references = Buffer.from([0xd8, 28, 0x81, 0x61, 0x61, 0xd8, 29, 0])
+    for (const bytes of [records, packed, references]) {
+      const expected = new Decoder().decodeMultiple(bytes)
+      const parts = [bytes.subarray(0, 1), bytes.subarray(1)]
+      assert.deepStrictEqual([...decodeIter(parts)], expected)
+      const result = await streamDecode(parts)
+      assert.isUndefined(result.error)
+      assert.deepStrictEqual(result.values, expected)
+      assert.strictEqual(result.calls, 2)
+    }
+  })
+
+  test('CSP uses the same record counts for whole and fragmented values', () => {
+    execFileSync(process.execPath, ['--disallow-code-generation-from-strings', '--input-type=module', '--eval', `
+      import assert from 'node:assert/strict'
+      import { Decoder, decodeIter } from ${JSON.stringify(new URL('../node-index.js', import.meta.url).href)}
+      const bytes = Buffer.from([0x83, ...[1, 2, 3].flatMap(n => [0xd9, 0xe0, 0, 0x82, n, n])])
+      const expected = new Decoder({ structures: [['a']] }).decode(bytes)
+      let calls = 0
+      const decodeMultiple = Decoder.prototype.decodeMultiple
+      Decoder.prototype.decodeMultiple = function (source) { calls++; return decodeMultiple.call(this, source) }
+      const parts = Array.from(bytes, (_, i) => bytes.subarray(i, i + 1))
+      assert.deepStrictEqual([...decodeIter(parts, { structures: [['a']] })], [expected])
+      assert.strictEqual(calls, 2)
+    `])
+  })
+
+  test('fatal errors after a framed value preserve preceding values', async () => {
+    const parts = [Buffer.from([0x81]), Buffer.from([1, 0x1c])]
+    const result = await streamDecode(parts)
+    assert.deepStrictEqual(result.values, [[1]])
+    assert.strictEqual(result.error?.message, 'Unknown token 28')
+    const values = []
+    assert.throws(() => { for (const value of decodeIter(parts)) values.push(value) }, 'Unknown token 28')
+    assert.deepStrictEqual(values, [[1]])
+  })
+
+  test('an internal chunk decoder can be reused after a scanned fatal error', () => {
+    const decoder = new Decoder({ mapsAsObjects: true })
+    const chunk = new ChunkDecoder(decoder)
+    try { decoder.decodeMultiple(Buffer.from([0xa1])) } catch (error) { chunk.keepIncomplete(error, Buffer.from([0xa1])) }
+    let failure
+    assert.throws(() => {
+      try { chunk.decodeAfterIncomplete(Buffer.from([0x80, 1])) } catch (error) { failure = error; throw error }
+    }, 'Invalid property name type object')
+    assert.strictEqual(chunk.keepIncomplete(failure), failure)
+    assert.isNull(chunk.scanner)
+    assert.isFalse(chunk.scanned)
+    try { decoder.decodeMultiple(Buffer.from([0x81])) } catch (error) { assert.isUndefined(chunk.keepIncomplete(error, Buffer.from([0x81]))) }
+    assert.deepStrictEqual(chunk.decodeAfterIncomplete(Buffer.from([1])), [[1]])
+  })
+
+  test('extension registration preserves optional decoders and mutable handlesRead flags', () => {
+    class EncodeOnly {}
+    assert.doesNotThrow(() => addExtension({
+      Class: EncodeOnly,
+      tag: 41003,
+      encode (value, encode) { encode('encode only') }
+    }))
+    assert.deepStrictEqual(new Decoder().decode(new Encoder().encode(new EncodeOnly())), new Tag('encode only', 41003))
+    assert.doesNotThrow(() => addExtension({ tag: 41003 }))
+    const decode = input => typeof input === 'function' ? [input(), input()] : input
+    addExtension({ tag: 41004, decode })
+    try {
+      decode.handlesRead = true
+      const bytes = Buffer.from([0xd9, 0xa0, 0x2c, 1, 2])
+      assert.deepStrictEqual(new Decoder().decode(bytes), [1, 2])
+      assert.throws(() => [...decodeIter([bytes.subarray(0, 2), bytes.subarray(2)])],
+        'Tag 41004: fragmented decoding cannot frame multi-item handlesRead extensions')
+      decode.handlesRead = false
+      assert.deepStrictEqual([...decodeIter(chunks(bytes.subarray(0, 4), 1))], [1])
+    } finally {
+      addExtension({ tag: 41004 })
+    }
+  })
+
+  test('a caught nested source-copy error preserves the outer fragment guard', () => {
+    const single = read => {
+      const value = read()
+      const slice = Buffer.prototype.slice
+      Buffer.prototype.slice = () => { throw new Error('injected copy failure') }
+      try {
+        assert.throws(() => new Decoder().decode(Buffer.from([1])), 'injected copy failure')
+      } finally {
+        Buffer.prototype.slice = slice
+      }
+      return value
+    }
+    const multi = read => [read(), read()]
+    single.handlesRead = multi.handlesRead = true
+    addExtension({ tag: 41005, decode: single })
+    addExtension({ tag: 41006, decode: multi })
+    try {
+      const bytes = Buffer.from([0x82, 0xd9, 0xa0, 0x2d, 1, 0xd9, 0xa0, 0x2e, 2, 3])
+      assert.deepStrictEqual(new Decoder().decode(bytes), [1, [2, 3]])
+      assert.throws(() => [...decodeIter([bytes.subarray(0, 1), bytes.subarray(1)])],
+        'Tag 41006: fragmented decoding cannot frame multi-item handlesRead extensions')
+    } finally {
+      addExtension({ tag: 41005 })
+      addExtension({ tag: 41006 })
+    }
+  })
+
+  test('single-item handlesRead and nested whole-buffer decoding remain supported', () => {
+    const multi = read => [read(), read()]
+    multi.handlesRead = true
+    const single = read => {
+      const value = read()
+      return [value, new Decoder().decode(Buffer.from([0xd9, 0xa0, 0x29, 1, 2]))]
+    }
+    single.handlesRead = true
+    addExtension({ tag: 41001, decode: multi })
+    addExtension({ tag: 41002, decode: single })
+    try {
+      const bytes = Buffer.from([0x82, 0xd9, 0xa0, 0x2a, 0x81, 1, 0xd9, 0xa0, 0x2a, 0x81, 2])
+      assert.deepStrictEqual([...decodeIter(chunks(bytes, 1))], [[[[1], [1, 2]], [[2], [1, 2]]]])
+    } finally {
+      addExtension({ tag: 41001 })
+      addExtension({ tag: 41002 })
+    }
+  })
+})

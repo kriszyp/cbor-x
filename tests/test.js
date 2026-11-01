@@ -519,6 +519,24 @@ suite('CBOR basic tests', function(){
 		var decoded = decode(encoded)
 		assert.equal(decoded.length, 0)
 	})
+	test('fixed map size overflow (map-16 to map-32)', function() {
+		this.timeout(120000)
+		// issue #131: the default encode() serializes objects with a back-patched
+		// map-16 (uint16) header, so an object with >= 65536 keys overflowed the
+		// count and the decoder stopped early with "Data read, but end of buffer not
+		// reached". Verify the round-trip across the map-16 -> map-32 boundary.
+		function roundTripObjectWith(count) {
+			var data = {}
+			for (var i = 0; i < count; i++)
+				data['k' + i] = i
+			var decoded = decode(encode(data))
+			assert.equal(Object.keys(decoded).length, count)
+			assert.deepEqual(decoded, data)
+		}
+		roundTripObjectWith(65535) // map-16 path, must stay unchanged
+		roundTripObjectWith(65536) // first size that needs map-32
+		roundTripObjectWith(70000) // well past the 16-bit boundary
+	})
 
 	test('random strings', function(){
 		var data = []
@@ -644,6 +662,14 @@ suite('CBOR basic tests', function(){
 		assert.equal(serialized.length, 9)
 		var deserialized = encoder.decode(serialized)
 		assert.equal(deserialized, data)
+	})
+	test('negative int64 as number', function() {
+		let encoded = Buffer.from('3b0000000e96848f5f', 'hex')
+		assert.equal(new CBOR.Decoder().decode(encoded), -62654812000n)
+
+		let decoder = new CBOR.Decoder({ int64AsNumber: true })
+		assert.equal(decoder.decode(encoded), -62654812000)
+		assert.equal(decoder.decode(Buffer.from('3b001ffffffffffffe', 'hex')), Number.MIN_SAFE_INTEGER)
 	})
 	test('bigint to float', function() {
 		var data = {

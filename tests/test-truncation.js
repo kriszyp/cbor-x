@@ -214,8 +214,8 @@ suite('incomplete input in streams', function () {
 	})
 
 	test('a value split into many chunks is decoded again only when its declared lengths could be met', async () => {
-		// decoded once for each declared length that the buffered bytes could not meet, and once to complete it
-		for (const [value, expectedCalls] of [[[1, 'two', Buffer.alloc(300000, 3), Buffer.alloc(100000, 4)], 3],
+		// decoded once to discover incomplete input, and once when the scan reaches the end
+		for (const [value, expectedCalls] of [[[1, 'two', Buffer.alloc(300000, 3), Buffer.alloc(100000, 4)], 2],
 				['y'.repeat(300000), 2], [[new Array(30000).fill(7)], 2]]) {
 			const { received, calls } = await streamChunks(split(new Encoder().encode(value), 16384), { end: false })
 			assert.deepStrictEqual(received, [value], 'emitted before the stream ends')
@@ -243,7 +243,7 @@ suite('incomplete input in streams', function () {
 	})
 
 	test('the bytes of an incomplete value are copied a bounded number of times', async () => {
-		// only the string being read at the end of each chunk has a declared length, so the stream decodes on every chunk
+		// many small strings exercise buffer growth while the scanner advances through the array
 		const value = new Array(2000).fill('x'.repeat(500))
 		const stream = new DecoderStream()
 		const received = []

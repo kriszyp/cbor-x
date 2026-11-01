@@ -1,5 +1,6 @@
 import { Encoder } from './encode.js'
-import { Decoder } from './decode.js'
+import { Decoder, _stream } from './decode.js'
+import { StructureScanner } from './scan.js'
 
 /**
  * Given an Iterable first argument, returns an Iterable where each value is encoded as a Buffer
@@ -97,6 +98,9 @@ export class ChunkDecoder {
     this.buffer = null
     this.bufferEnd = 0
     this.appends = 0
+    this.scanner = null
+    this.scanned = false
+    this.resetScanner = false
     this.neededLength = 0 // a lower bound on the incomplete value's length
   }
 
@@ -120,13 +124,29 @@ export class ChunkDecoder {
     this.bufferEnd = length
     this.appends++
     if (length < this.neededLength) return []
-    const values = this.decoder.decodeMultiple(this.buffer.subarray(0, length))
+    if (!this.scanner) this.scanner = new StructureScanner(this.decoder)
+    if (this.resetScanner) {
+      this.scanner.reset()
+      this.resetScanner = false
+    }
+    if (!this.scanner.scan(this.buffer, length)) {
+      this.neededLength = this.scanner.neededLength
+      if (length > this.maxIncompleteBufferSize) throw maxIncompleteBufferSizeError()
+      return []
+    }
+    this.scanned = true
+    const values = _stream.decode(this.decoder, this.buffer.subarray(0, length), this.scanner.position)
+    this.scanned = false
     this.buffer = null
     return values
   }
 
   keepIncomplete (error, chunk) {
     if (!error.incomplete) return this.fail(error)
+    if (this.scanned && error.lastPosition === 0) {
+      error.incomplete = false
+      return this.fail(error)
+    }
     const source = this.buffer ? this.buffer.subarray(0, this.bufferEnd) : chunk
     const length = source.length - error.lastPosition
     if (length > this.maxIncompleteBufferSize) return this.fail(maxIncompleteBufferSizeError())
@@ -142,6 +162,8 @@ export class ChunkDecoder {
       this.bufferEnd = length
       this.appends = 0
     }
+    this.scanned = false
+    this.resetScanner = true
     this.neededLength = Math.max(length + 1, error.neededEnd ? error.neededEnd - error.lastPosition : 0)
   }
 
@@ -155,6 +177,9 @@ export class ChunkDecoder {
 
   fail (error) {
     this.buffer = null
+    this.scanner = null
+    this.scanned = false
+    this.resetScanner = false
     return error
   }
 }
