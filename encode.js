@@ -572,9 +572,8 @@ export class Encoder extends Decoder {
 								return encode(json)
 						}
 
-						// checked here rather than in extensions, where every class instance would pay another instanceof
+						// not in extensions, so class instances that reach writeObject do not pay another instanceof
 						if (constructor === DataView) {
-							// target.set would copy nothing from a DataView, so write the bytes it spans
 							writeBuffer(new Uint8Array(value.buffer, value.byteOffset, value.byteLength), makeRoom)
 							return
 						}

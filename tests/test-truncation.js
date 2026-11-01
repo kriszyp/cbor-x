@@ -548,13 +548,28 @@ suite('complete but invalid input is not incomplete', function () {
 			new Decoder().decodeMultiple(Buffer.from([0x01, 0xd9, 0x9c, 0x45, 0x01]))
 			assert.fail('should not decode')
 		} catch (error) {
-			// not replaced by the TypeError from annotating it with lastPosition
 			assert.strictEqual(error, 'invalid')
 		}
 	})
 
+	test('an extension throwing a falsy or non-Error value fails a stream', async () => {
+		let tag = 40006
+		for (const thrown of [null, undefined, 0, '', 'invalid']) {
+			const t = tag++
+			addExtension({ tag: t, decode: () => { throw thrown } })
+			const bytes = Buffer.from([0x01, 0xd9, t >> 8, t & 0xff, 0x01])
+			assert.throws(() => [...decodeIter([bytes])], String(thrown || 'Decoding failed'))
+			const stream = new DecoderStream()
+			stream.on('data', () => {})
+			const error = await new Promise(resolve => {
+				stream.on('error', resolve)
+				stream.write(bytes)
+			})
+			assert.strictEqual(thrown ? error : error.message, thrown || 'Decoding failed: ' + thrown)
+		}
+	})
+
 	test('a truncated shared structures blob', async () => {
-		// getShared() decodes its own source, so a truncation there cannot be completed by more of the outer input
 		let blob
 		const encoder = new Encoder({ useRecords: true, getStructures() {}, saveStructures(shared) { blob = encode(shared) } })
 		const encoded = encoder.encode({ a: 1 })

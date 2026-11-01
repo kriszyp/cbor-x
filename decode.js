@@ -204,7 +204,6 @@ export class Decoder {
 				return values
 			}
 		} catch(error) {
-			// a value thrown by an extension need not be an object, and assigning to it would throw a TypeError that hides it
 			if (error && typeof error == 'object') {
 				error.lastPosition = lastPosition
 				error.values = values

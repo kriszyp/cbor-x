@@ -39,7 +39,7 @@ export class DecoderStream extends Transform {
 			// decodeMultiple is called directly, since another call level here measurably slows small writes
 			values = this.chunkDecoder.buffer ? this.chunkDecoder.decodeAfterIncomplete(chunk) : this.decoder.decodeMultiple(chunk)
 		} catch(error) {
-			values = error.values
+			values = error && error.values
 			fatalError = this.chunkDecoder.keepIncomplete(error, chunk)
 		}
 		for (let value of values || []) {

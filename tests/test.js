@@ -716,7 +716,6 @@ suite('CBOR basic tests', function(){
 		assert.equal(decoded.byteLength, 3);
 	})
 	test('encode DataView', function() {
-		// a byte string of exactly the bytes the view spans, not an empty map
 		let bytes = new Uint8Array(40).map((_, i) => i)
 		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 3, 4))).toString('hex'), '4403040506')
 		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 5, 30))).toString('hex'),
