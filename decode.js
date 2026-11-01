@@ -124,13 +124,7 @@ export class Decoder {
 			// re-entrant execution, save the state and restore it after we do this decode
 			return saveState(() => {
 				clearSource()
-				try {
-					return this ? this.decode(source, end) : Decoder.prototype.decode.call(defaultOptions, source, end)
-				} catch (error) {
-					if (error && typeof error == 'object')
-						nestedDecodeErrors.add(error)
-					throw error
-				}
+				return this ? this.decode(source, end) : Decoder.prototype.decode.call(defaultOptions, source, end)
 			})
 		}
 		srcEnd = end > -1 ? end : source.length
@@ -153,6 +147,8 @@ export class Decoder {
 				throw error
 			throw new Error('Source must be a Uint8Array or Buffer but was a ' + ((source && typeof source == 'object') ? source.constructor.name : typeof source))
 		}
+		// past the view, the JS string readers would decode the missing bytes as zeros instead of failing as truncated
+		if (srcEnd > source.length) srcEnd = source.length
 		if (this instanceof Decoder) {
 			currentDecoder = this
 			packedValues = this.sharedValues &&
@@ -177,13 +173,7 @@ export class Decoder {
 			// Keep the complete nested sequence inside its own decoder state.
 			return saveState(() => {
 				clearSource()
-				try {
-					return this ? this.decodeMultiple(source, forEach) : defaultDecoder.decodeMultiple(source, forEach)
-				} catch (error) {
-					if (error && typeof error == 'object')
-						nestedDecodeErrors.add(error)
-					throw error
-				}
+				return this ? this.decodeMultiple(source, forEach) : defaultDecoder.decodeMultiple(source, forEach)
 			})
 		}
 		let values, lastPosition = 0
@@ -214,8 +204,11 @@ export class Decoder {
 				return values
 			}
 		} catch(error) {
-			error.lastPosition = lastPosition
-			error.values = values
+			// a value thrown by an extension need not be an object, and assigning to it would throw a TypeError that hides it
+			if (error && typeof error == 'object') {
+				error.lastPosition = lastPosition
+				error.values = values
+			}
 			throw error
 		} finally {
 			sequentialMode = false
@@ -1355,6 +1348,12 @@ function saveState(callback) {
 	restoreMapsAsObject = false
 	try {
 		return callback()
+	} catch (error) {
+		// the callback decodes its own source (a shared structures blob, or an extension's embedded data), so a
+		// truncation there cannot be completed by more of the outer input; checkedRead() clears the flag
+		if (error && typeof error == 'object')
+			nestedDecodeErrors.add(error)
+		throw error
 	} finally {
 		fragmentEnd = savedFragmentEnd
 		fragmentReadString = savedFragmentReader

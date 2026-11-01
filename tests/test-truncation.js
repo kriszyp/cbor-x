@@ -1,5 +1,5 @@
 import { Decoder, decode, decodeMultiple, setSizeLimits, addExtension } from '../decode.js'
-import { Encoder } from '../encode.js'
+import { Encoder, encode } from '../encode.js'
 import { DecoderStream, decodeIter } from '../node-index.js'
 import { Readable, Writable } from 'stream'
 import vm from 'vm'
@@ -542,6 +542,40 @@ suite('complete but invalid input is not incomplete', function () {
 		assert.throws(() => new Decoder().decode(Buffer.from([0xd9, 0x9c, 0x44, 0x01])), 'invalid')
 	})
 
+	test('an extension throwing a non-Error value in decodeMultiple', () => {
+		addExtension({ tag: 40005, decode: () => { throw 'invalid' } })
+		try {
+			new Decoder().decodeMultiple(Buffer.from([0x01, 0xd9, 0x9c, 0x45, 0x01]))
+			assert.fail('should not decode')
+		} catch (error) {
+			// not replaced by the TypeError from annotating it with lastPosition
+			assert.strictEqual(error, 'invalid')
+		}
+	})
+
+	test('a truncated shared structures blob', async () => {
+		// getShared() decodes its own source, so a truncation there cannot be completed by more of the outer input
+		let blob
+		const encoder = new Encoder({ useRecords: true, getStructures() {}, saveStructures(shared) { blob = encode(shared) } })
+		const encoded = encoder.encode({ a: 1 })
+		const truncated = blob.subarray(0, blob.length - 1)
+		const options = { useRecords: true, getStructures: () => decode(truncated) }
+		try {
+			new Decoder(options).decode(encoded)
+			assert.fail('should not decode')
+		} catch (error) {
+			assert.isNotOk(error.incomplete, error.message)
+		}
+		const stream = new DecoderStream(options)
+		stream.on('data', () => {})
+		const error = await new Promise(resolve => {
+			stream.on('error', resolve)
+			stream.write(encoded)
+		})
+		assert.isNotOk(error.incomplete, error.message)
+		assert.isNull(stream.chunkDecoder.buffer)
+	})
+
 	test('packed values table truncated after its tag', () => {
 		try {
 			new Decoder().decode(Buffer.from([0xd8, 0x33]))
@@ -605,5 +639,24 @@ suite('tag 259 (map)', function () {
 		stream.end()
 		await new Promise(resolve => stream.on('finish', resolve))
 		assert.deepStrictEqual(received, [{ a: new Map([[1, 2]]) }])
+	})
+})
+
+suite('end beyond the source', function () {
+	test('reads nothing past the end of the source view', () => {
+		// a Buffer view into a shared ArrayBuffer (as Node's Buffer pool hands out), followed by other data
+		const shared = new Uint8Array(256)
+		shared.set(Buffer.from('SECRET-PASSWORD!'), 2)
+		const view = Buffer.from(shared.buffer, 0, 2)
+		view[0] = 0x81; view[1] = 0x70 // [text(16)], whose body lies outside the view
+		for (const end of [18, 200]) {
+			try {
+				const value = new Decoder().decode(view, end)
+				assert.fail('should not decode: ' + JSON.stringify(value))
+			} catch (error) {
+				assert.notInclude(error.message, 'SECRET', `end ${end}`)
+				assert.isTrue(error.incomplete, error.message)
+			}
+		}
 	})
 })

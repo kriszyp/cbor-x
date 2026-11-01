@@ -715,6 +715,22 @@ suite('CBOR basic tests', function(){
 		assert.equal(decoded[2], 5);
 		assert.equal(decoded.byteLength, 3);
 	})
+	test('encode DataView', function() {
+		// a byte string of exactly the bytes the view spans, not an empty map
+		let bytes = new Uint8Array(40).map((_, i) => i)
+		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 3, 4))).toString('hex'), '4403040506')
+		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 5, 30))).toString('hex'),
+			'581e' + Buffer.from(bytes.subarray(5, 35)).toString('hex'))
+		assert.equal(Buffer.from(encode(new DataView(bytes.buffer, 0, 0))).toString('hex'), '40')
+		assert.deepEqual(decode(encode({ v: new DataView(bytes.buffer, 1, 2) })), { v: Buffer.from([1, 2]) })
+		// other binary types are unchanged
+		assert.equal(Buffer.from(encode(bytes.buffer.slice(1, 4))).toString('hex'), '43010203')
+		assert.equal(Buffer.from(encode(bytes.subarray(1, 4))).toString('hex'), 'd84043010203')
+		assert.equal(Buffer.from(encode(Buffer.from(bytes.subarray(1, 4)))).toString('hex'), '43010203')
+		assert.equal(Buffer.from(new Encoder({ tagUint8Array: false }).encode(bytes.subarray(1, 4))).toString('hex'), '43010203')
+		assert.equal(Buffer.from(encode(new Uint16Array(bytes.buffer, 2, 2))).toString('hex'), 'd8454402030405')
+		assert.equal(Buffer.from(encode(new Uint8ClampedArray(bytes.buffer, 2, 2))).toString('hex'), 'd844420203')
+	})
 
 	test('iterator/indefinite length array', function(){
 		class NotArray {
