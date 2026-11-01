@@ -127,7 +127,8 @@ export class Decoder {
 				return this ? this.decode(source, end) : Decoder.prototype.decode.call(defaultOptions, source, end)
 			})
 		}
-		srcEnd = end > -1 ? end : source.length
+		// past the view, the JS string readers would decode the missing bytes as zeros instead of failing as truncated
+		srcEnd = end > -1 && end < source.length ? end : source.length
 		position = 0
 		stringPosition = 0
 		srcStringEnd = 0
@@ -147,8 +148,6 @@ export class Decoder {
 				throw error
 			throw new Error('Source must be a Uint8Array or Buffer but was a ' + ((source && typeof source == 'object') ? source.constructor.name : typeof source))
 		}
-		// past the view, the JS string readers would decode the missing bytes as zeros instead of failing as truncated
-		if (srcEnd > source.length) srcEnd = source.length
 		if (this instanceof Decoder) {
 			currentDecoder = this
 			packedValues = this.sharedValues &&
