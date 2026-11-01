@@ -1,5 +1,5 @@
 import { Decoder, decode, decodeMultiple, setSizeLimits, addExtension } from '../decode.js'
-import { Encoder } from '../encode.js'
+import { Encoder, encode } from '../encode.js'
 import { DecoderStream, decodeIter } from '../node-index.js'
 import { Readable, Writable } from 'stream'
 import vm from 'vm'
@@ -542,6 +542,81 @@ suite('complete but invalid input is not incomplete', function () {
 		assert.throws(() => new Decoder().decode(Buffer.from([0xd9, 0x9c, 0x44, 0x01])), 'invalid')
 	})
 
+	test('an extension throwing a non-Error value in decodeMultiple', () => {
+		addExtension({ tag: 40005, decode: () => { throw 'invalid' } })
+		try {
+			new Decoder().decodeMultiple(Buffer.from([0x01, 0xd9, 0x9c, 0x45, 0x01]))
+			assert.fail('should not decode')
+		} catch (error) {
+			assert.strictEqual(error, 'invalid')
+		}
+	})
+
+	test('an extension throwing a falsy or non-Error value fails a stream', async () => {
+		let tag = 40006
+		for (const thrown of [null, undefined, false, 0, '', 'invalid']) {
+			const t = tag++
+			addExtension({ tag: t, decode: () => { throw thrown } })
+			const bytes = Buffer.from([0x01, 0xd9, t >> 8, t & 0xff, 0x01])
+			assert.throws(() => [...decodeIter([bytes])], String(thrown || 'Decoding failed'))
+			const stream = new DecoderStream()
+			stream.on('data', () => {})
+			const error = await new Promise(resolve => {
+				stream.on('error', resolve)
+				stream.write(bytes)
+			})
+			assert.strictEqual(thrown ? error : error.message, thrown || 'Decoding failed: ' + thrown)
+		}
+	})
+
+	test('an extension throwing a function gets the values decoded before it', async () => {
+		const failure = function () {}
+		failure.values = 1
+		addExtension({ tag: 40012, decode: () => { throw failure } })
+		const bytes = Buffer.from([0x01, 0xd9, 0x9c, 0x4c, 0x01])
+		let thrown
+		try {
+			new Decoder().decodeMultiple(bytes)
+		} catch (error) {
+			thrown = error
+		}
+		assert.strictEqual(thrown, failure)
+		assert.deepStrictEqual(failure.values, [1])
+		const stream = new DecoderStream()
+		const received = []
+		stream.on('data', value => received.push(value))
+		const error = await new Promise(resolve => {
+			stream.on('error', resolve)
+			stream.write(bytes)
+		})
+		assert.strictEqual(error, failure)
+		assert.deepStrictEqual(received, [1])
+	})
+
+	test('a truncated shared structures blob', async () => {
+		let blob
+		const encoder = new Encoder({ useRecords: true, getStructures() {}, saveStructures(shared) { blob = encode(shared) } })
+		const encoded = encoder.encode({ a: 1 })
+		const truncated = blob.subarray(0, blob.length - 1)
+		const options = { useRecords: true, getStructures: () => decode(truncated) }
+		let decodeError
+		try {
+			new Decoder(options).decode(encoded)
+		} catch (error) {
+			decodeError = error
+		}
+		assert.instanceOf(decodeError, Error, 'should not decode')
+		assert.isNotOk(decodeError.incomplete, decodeError.message)
+		const stream = new DecoderStream(options)
+		stream.on('data', () => {})
+		const error = await new Promise(resolve => {
+			stream.on('error', resolve)
+			stream.write(encoded)
+		})
+		assert.isNotOk(error.incomplete, error.message)
+		assert.isNull(stream.chunkDecoder.buffer)
+	})
+
 	test('packed values table truncated after its tag', () => {
 		try {
 			new Decoder().decode(Buffer.from([0xd8, 0x33]))
@@ -605,5 +680,29 @@ suite('tag 259 (map)', function () {
 		stream.end()
 		await new Promise(resolve => stream.on('finish', resolve))
 		assert.deepStrictEqual(received, [{ a: new Map([[1, 2]]) }])
+	})
+})
+
+suite('end beyond the source', function () {
+	test('reads nothing past the end of the source view', () => {
+		// a Buffer view into a shared ArrayBuffer (as Node's Buffer pool hands out), followed by other data
+		const shared = new Uint8Array(256)
+		shared.set(Buffer.from('SECRET-PASSWORD!'), 2)
+		const view = Buffer.from(shared.buffer, 0, 2)
+		view[0] = 0x81; view[1] = 0x70 // [text(16)], whose body lies outside the view
+		for (const end of [18, 200]) {
+			try {
+				const value = new Decoder().decode(view, end)
+				assert.fail('should not decode: ' + JSON.stringify(value))
+			} catch (error) {
+				assert.notInclude(error.message, 'SECRET', `end ${end}`)
+				assert.isTrue(error.incomplete, error.message)
+			}
+		}
+		const offsetView = Buffer.from(shared.buffer, 4, 2)
+		offsetView[0] = 0x81; offsetView[1] = 0x6e // [text(14)] at a nonzero offset
+		assert.throws(() => new Decoder().decode(offsetView, 16), /Unexpected end/)
+		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64]), 10), 100)
+		assert.strictEqual(new Decoder().decode(Buffer.from([0x18, 0x64, 0x01]), 2), 100)
 	})
 })

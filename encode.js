@@ -572,6 +572,11 @@ export class Encoder extends Decoder {
 								return encode(json)
 						}
 
+						// not in extensions, so class instances that reach writeObject do not pay another instanceof
+						if (constructor === DataView) {
+							writeBuffer(new Uint8Array(value.buffer, value.byteOffset, value.byteLength), makeRoom)
+							return
+						}
 						// no extension found, write as a plain object
 						writeObject(value)
 					}

@@ -55,7 +55,7 @@ export function decodeIter (bufferIterator, options = {}) {
       return chunkDecoder.buffer ? chunkDecoder.decodeAfterIncomplete(chunk) : decoder.decodeMultiple(chunk)
     } catch (error) {
       fatalError = chunkDecoder.keepIncomplete(error, chunk)
-      return error.values || []
+      return (error && error.values) || []
     }
   }
 
@@ -142,6 +142,8 @@ export class ChunkDecoder {
   }
 
   keepIncomplete (error, chunk) {
+    // an extension may throw any value, and a falsy one would read as success
+    if (!error) return this.fail(new Error('Decoding failed: ' + error))
     if (!error.incomplete) return this.fail(error)
     if (this.scanned && error.lastPosition === 0) {
       error.incomplete = false
