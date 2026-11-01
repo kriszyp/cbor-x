@@ -193,7 +193,8 @@ export class StructureScanner {
             this.restoreMap = false
           }
         }
-        else if (major !== 7) throw new Error('Invalid major type for indefinite length ' + major)
+        else if (major === 7) throw new Error('Unexpected break stop code outside of an indefinite-length item')
+        else throw new Error('Invalid major type for indefinite length ' + major)
         continue
       }
       switch (major) {
