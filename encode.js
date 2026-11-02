@@ -361,6 +361,11 @@ export class Encoder extends Decoder {
 							target[strPosition++] = c1 >> 12 & 0x3f | 0x80
 							target[strPosition++] = c1 >> 6 & 0x3f | 0x80
 							target[strPosition++] = c1 & 0x3f | 0x80
+						} else if ((c1 & 0xf800) === 0xd800) {
+							// a lone surrogate has no UTF-8 encoding; write U+FFFD as encodeUtf8 does for longer strings
+							target[strPosition++] = 0xef
+							target[strPosition++] = 0xbf
+							target[strPosition++] = 0xbd
 						} else {
 							target[strPosition++] = c1 >> 12 | 0xe0
 							target[strPosition++] = c1 >> 6 & 0x3f | 0x80
