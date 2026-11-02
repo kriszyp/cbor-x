@@ -538,6 +538,17 @@ suite('CBOR basic tests', function(){
 		roundTripObjectWith(70000) // well past the 16-bit boundary
 	})
 
+	test('lone surrogates encode as U+FFFD regardless of string length', function(){
+		for (let n of [0, 10, 60, 70]) {
+			let decoded = decode(encode('x'.repeat(n) + '\ud83d'))
+			assert.equal(decoded, 'x'.repeat(n) + '\ufffd', 'prefix ' + n)
+		}
+		assert.equal(decode(encode('a\udc00b')), 'a\ufffdb')
+		let encoded = encode('hi \ud83d')
+		assert.equal(Buffer.from(encoded.subarray(encoded.length - 5)).toString('hex'), '6920efbfbd')
+		// a valid pair is unchanged
+		assert.equal(decode(encode('a\ud83d\ude00')), 'a\ud83d\ude00')
+	})
 	test('random strings', function(){
 		var data = []
 		for (var i = 0; i < 2000; i++) {
