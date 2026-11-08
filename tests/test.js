@@ -612,6 +612,15 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.date.getTime(), 1532219539000)
 		assert.isTrue(isNaN(deserialized.invalidDate.getTime()))
 	})
+	test('decode tag 1 date with 8-byte integer seconds', function(){
+		// 0x100000000 seconds, positive and negative
+		assert.equal(decode(Buffer.from('c11b0000000100000000', 'hex')).getTime(), 4294967296000)
+		assert.equal(decode(Buffer.from('c13b0000000100000000', 'hex')).getTime(), -4294967297000)
+		// too far out for a JS Date
+		assert.isTrue(isNaN(decode(Buffer.from('c11bffffffffffffffff', 'hex')).getTime()))
+		let decoder = new CBOR.Decoder({ int64AsNumber: true })
+		assert.equal(decoder.decode(Buffer.from('c11b0000000100000000', 'hex')).getTime(), 4294967296000)
+	})
 	test('key caching', function() {
 		var data = {
 			foo: 2,
