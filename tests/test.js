@@ -478,6 +478,20 @@ suite('CBOR basic tests', function(){
 		assert.equal(deserialized.uint16Array[1], 4)
 	})
 
+	test('float16 typed arrays (RFC 8746 tags 80 and 84)', function() {
+		if (typeof Float16Array == 'undefined') return
+		// encoded with its own tag, not as a generic array of floats, so the type round-trips
+		let serialized = encode(new Float16Array([1.5, -0.25]))
+		assert.equal(Buffer.from(serialized).toString('hex'), 'd85444003e00b4')
+		let deserialized = decode(serialized)
+		assert.equal(deserialized.constructor.name, 'Float16Array')
+		assert.deepEqual(Array.from(deserialized), [1.5, -0.25])
+		// big endian form from another encoder
+		deserialized = decode(new Uint8Array([0xd8, 0x50, 0x44, 0x3e, 0x00, 0xb4, 0x00]))
+		assert.equal(deserialized.constructor.name, 'Float16Array')
+		assert.deepEqual(Array.from(deserialized), [1.5, -0.25])
+	})
+
 	test('explicit maps and sets', function () {
 		let map = new Map()
 		map.set('key', { inside: 'value'})

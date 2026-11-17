@@ -1220,6 +1220,9 @@ const typedArrayTags = [64, 68, 69, 70, 71, 72, 77, 78, 79, 85, 86]
 for (let i = 0; i < typedArrays.length; i++) {
 	registerTypedArray(typedArrays[i], typedArrayTags[i])
 }
+// RFC 8746 float16 arrays (tag 84 little endian, 80 big endian), where the runtime has Float16Array
+if (typeof Float16Array != 'undefined')
+	registerTypedArray(Float16Array, 84)
 function registerTypedArray(TypedArray, tag) {
 	let dvMethod = 'get' + TypedArray.name.slice(0, -5)
 	let bytesPerElement;
