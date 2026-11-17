@@ -1073,7 +1073,7 @@ extensionClasses = [ Date, Set, Error, RegExp, Tag, ArrayBuffer,
 	Uint8Array, Uint8ClampedArray, Uint16Array, Uint32Array,
 	typeof BigUint64Array == 'undefined' ? function() {} : BigUint64Array, Int8Array, Int16Array, Int32Array,
 	typeof BigInt64Array == 'undefined' ? function() {} : BigInt64Array,
-	Float32Array, Float64Array, SharedData ]
+	Float32Array, Float64Array, typeof Float16Array == 'undefined' ? function() {} : Float16Array, SharedData ]
 
 //Object.getPrototypeOf(Uint8Array.prototype).constructor /*TypedArray*/
 extensions = [{ // Date
@@ -1140,6 +1140,7 @@ extensions = [{ // Date
 	typedArrayEncoder(79, 8),
 	typedArrayEncoder(85, 4),
 	typedArrayEncoder(86, 8),
+	typedArrayEncoder(84, 2),
 {
 	encode(sharedData, encode) { // write SharedData
 		let packedValues = sharedData.packedValues || []
