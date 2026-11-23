@@ -1016,12 +1016,17 @@ currentExtensions[3] = (buffer) => {
 }
 currentExtensions[4] = (fraction) => {
 	// best to reparse to maintain accuracy
-	return +(fraction[1] + 'e' + fraction[0])
+	let value = +(fraction[1] + 'e' + fraction[0])
+	// keep the original fraction if it does not fit in a double
+	return isFinite(value) ? value : new Tag(fraction, 4)
 }
 
 currentExtensions[5] = (fraction) => {
-	// probably not sufficiently accurate
-	return fraction[1] * Math.exp(fraction[0] * Math.log(2))
+	// multiplying an integer by a power of two is exact, as long as the result does not overflow or underflow
+	let value = fraction[1] * 2 ** fraction[0]
+	if (Number.isSafeInteger(fraction[1]) && isFinite(value) && (value !== 0 || fraction[1] === 0))
+		return value
+	return new Tag(fraction, 5)
 }
 
 // the registration of the record definition extension
