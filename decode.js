@@ -50,6 +50,49 @@ try {
 	inlineObjectReadThreshold = Infinity
 }
 
+// required in order to make toJSON work with String proxy
+function stringProxy(strings) {
+	const combinedString =strings.join('');
+	const stringObject =new String(combinedString)
+	// const stringObject = {value:combinedString}
+	const handlers ={
+			toJSON : () => combinedString,
+			valueOf : () => combinedString,
+			toString : () => combinedString,
+			_cbor_indef: strings
+	}
+	return  new Proxy(stringObject, {
+			get(target, prop) {
+					if (typeof combinedString[prop] === 'function') {
+							if(prop == 'constructor'){
+								return target[prop]
+							}
+							return (combinedString[prop]).bind(combinedString);
+					}
+					if(handlers[prop]){
+							return handlers[prop]
+					}
+					return combinedString[prop];
+			}
+	});
+}
+
+function indefWrapper(target, extra_prop, value) {
+	return new Proxy(target, {
+			get(target, prop) {
+					if (typeof target[prop] === 'function') {
+							if(prop == 'constructor'){
+								return target[prop]
+							}
+							return target[prop].bind(target);
+					}
+					if (prop === extra_prop) {
+							return value;
+					}
+					return target[prop];
+			}
+	});
+}
 
 
 export class Decoder {
@@ -69,6 +112,7 @@ export class Decoder {
 				this.mapKey = new Map()
 				for (let [k,v] of Object.entries(options.keyMap)) this.mapKey.set(v,k)
 			}
+			options.preserveIndefiniteLength = options.preserveIndefiniteLength === true ? true:false
 		}
 		Object.assign(this, options)
 	}
@@ -340,7 +384,6 @@ export function read() {
 				switch(majorType) {
 					case 2: // byte string
 					case 3: // text string
-						throw new Error('Indefinite length not supported for byte or text strings')
 					case 4: // array
 						let array = []
 						let i = 0
@@ -348,7 +391,17 @@ export function read() {
 							if (i >= maxArraySize) throw new Error(`Array length exceeds ${maxArraySize}`)
 							array[i++] = read()
 						}
+						if(currentDecoder.preserveIndefiniteLength){// decoded data for later re-encode
+							if (majorType == 2) 
+								return indefWrapper(Buffer.concat(array),"_cbor_indef",array) 
+							else if (majorType == 4) 
+								return indefWrapper(array,"_cbor_indef",true)
+							else if (majorType == 3)
+								return stringProxy(array)
+						}
+						
 						return majorType == 4 ? array : majorType == 3 ? array.join('') : Buffer.concat(array)
+
 					case 5: // map
 						let key
 						if (currentDecoder.mapsAsObjects) {
@@ -395,7 +448,7 @@ export function read() {
 									map.set(key, read())
 								}
 							}
-							return map
+							return currentDecoder.preserveIndefiniteLength?indefWrapper(map,"_cbor_indef",true):map
 						}
 					case 7:
 						// readBreak consumes every break that ends an indefinite-length item
