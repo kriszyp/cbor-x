@@ -670,6 +670,12 @@ suite('tag 259 (map)', function () {
 		assert.deepStrictEqual(decoded, new Map([[1, { b: 2 }]]))
 	})
 
+	test('does not apply map mode inside a non-map tagged value', () => {
+		const decoded = new Decoder({ mapsAsObjects: true }).decode(
+			Buffer.from([0xd9, 0x01, 0x03, 0x82, 0xa1, 0x61, 0x61, 0x01, 0xa1, 0x61, 0x62, 0x02])) // 259([{a: 1}, {b: 2}])
+		assert.deepStrictEqual(decoded, [{ a: 1 }, { b: 2 }])
+	})
+
 	test('a stream retry after truncation inside a tagged value decodes the same', async () => {
 		const bytes = Buffer.from([0xa1, 0x61, 0x61, 0xd9, 0x01, 0x03, 0xa1, 0x01, 0x02]) // {a: 259({1: 2})}
 		const stream = new DecoderStream({ mapsAsObjects: true })
