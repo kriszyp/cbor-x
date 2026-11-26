@@ -1156,7 +1156,7 @@ currentExtensions[258] = (array) => new Set(array); // https://github.com/input-
 	// https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec
 	// for decoding as a standard Map
 	let decoder = currentDecoder
-	if (decoder.mapsAsObjects) {
+	if (decoder.mapsAsObjects && src[position] >> 5 === 5) {
 		decoder.mapsAsObjects = false
 		restoreMapsAsObject = true
 		try {
